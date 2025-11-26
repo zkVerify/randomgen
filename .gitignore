@@ -1,0 +1,8 @@
+node_modules/
+build/
+pot12_0000.ptau
+pot12_final.ptau
+*.zkey
+*.wtns
+*.r1cs
+*.wasm
