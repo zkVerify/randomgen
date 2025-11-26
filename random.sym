@@ -1,0 +1,5 @@
+1,2,0,main.blockHash
+2,3,0,main.userNonce
+3,4,0,main.kurierEntropy
+4,1,0,main.R
+5,1,0,main.seed
