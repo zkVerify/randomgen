@@ -1,5 +1,5 @@
 {
-  "blockHash": 123456,
-  "userNonce": 42,
-  "kurierEntropy": 7
+  "blockHash": "0xc9ccb486624046360c2523d3fb3dc8112dfe0c3e90d1896605dfbe363f9c0001",
+  "userNonce": 7,
+  "kurierEntropy": 42
 }

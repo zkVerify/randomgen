@@ -16,12 +16,17 @@ if [ ! -f "$INPUT_FILE" ]; then
   exit 1
 fi
 
+if [ ! -f "$BUILD_DIR/${CIRCUIT_NAME}.r1cs" ]; then
+  echo "Missing $BUILD_DIR/${CIRCUIT_NAME}.r1cs. Run scripts/compile.sh first."
+  exit 1
+fi
+
 if [ ! -f "$BUILD_DIR/${CIRCUIT_NAME}.wasm" ]; then
   echo "Missing $BUILD_DIR/${CIRCUIT_NAME}.wasm. Run scripts/compile.sh first."
   exit 1
 fi
 
-# Generate the witness using snarkjs (works with circom 0.x artifacts)
+# Generate the witness using snarkjs (compatible with Circom 2 wasm)
 snarkjs wtns calculate "$BUILD_DIR/${CIRCUIT_NAME}.wasm" "$INPUT_FILE" "$BUILD_DIR/witness.wtns"
 
 snarkjs groth16 prove "$BUILD_DIR/${CIRCUIT_NAME}_final.zkey" "$BUILD_DIR/witness.wtns" "$BUILD_DIR/proof.json" "$BUILD_DIR/public.json"

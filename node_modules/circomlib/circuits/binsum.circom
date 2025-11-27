@@ -49,7 +49,6 @@ To waranty binary outputs:
 /*
     This function calculates the number of extra bits in the output to do the full sum.
  */
- pragma circom 2.0.0;
 
 function nbits(a) {
     var n = 1;

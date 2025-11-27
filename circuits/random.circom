@@ -1,20 +1,34 @@
+include "../node_modules/circomlib/circuits/poseidon.circom";
+include "../node_modules/circomlib/circuits/comparators.circom";
+include "../node_modules/circomlib/circuits/bitify.circom";
+
 template RandomCircuit() {
-    // Public inputs
     signal input blockHash;
     signal input userNonce;
-
-    // Private input (optional entropy from Kurier)
     signal input kurierEntropy;
-
-    // Output
     signal output R;
 
-    // Simple mixing of inputs (acts as a deterministic RNG seed)
-    signal seed;
-    seed <== blockHash * 1234567 + userNonce * 890123 + kurierEntropy * 456789;
+    // Hash the 3 inputs with Poseidon
+    component poseidon = Poseidon(3);
+    poseidon.inputs[0] <== blockHash;
+    poseidon.inputs[1] <== userNonce;
+    poseidon.inputs[2] <== kurierEntropy;
 
-    // Output the mixed value directly (you can post-process modulo 1000 off-circuit if desired)
-    R <== seed;
+    // Seed is the hash output
+    signal seed;
+    seed <== poseidon.out;
+
+    // R = seed mod 1000
+    signal quotient;
+    component quotientBits = Num2Bits(254);
+    quotientBits.in <== quotient;
+    seed === quotient * 1000 + R;
+
+    // Ensure R < 1000
+    component lt = LessThan(16);
+    lt.in[0] <== R;
+    lt.in[1] <== 1000;
+    lt.out === 1;
 }
 
 component main = RandomCircuit();

@@ -6,3 +6,6 @@ pot12_final.ptau
 *.wtns
 *.r1cs
 *.wasm
+kurier/.env
+kurier/node_modules/
+kurier/circom-vkey.json
