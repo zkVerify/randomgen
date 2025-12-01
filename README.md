@@ -12,11 +12,13 @@ RandomGen provides a secure, verifiable way to generate random numbers using zer
 
 ### Circuit Details
 
-The circuit takes three inputs and produces a random number in the range [0, 1000):
+The circuit takes three public inputs and one private input to produce a random number:
 
-- **Public inputs**: `blockHash`, `userNonce`
+- **Public inputs**: `blockHash`, `userNonce`, `N` (modulus)
 - **Private input**: `kurierEntropy` (optional extra entropy)
-- **Output**: `R` = `Poseidon(blockHash, userNonce, kurierEntropy) mod 1000`
+- **Output**: `R` = `Poseidon(blockHash, userNonce, kurierEntropy) mod N`
+
+The output `R` is in the range [0, N).
 
 ## Installation
 
@@ -82,7 +84,7 @@ async function generateRandomProof() {
     blockHash: 12345678901234567890n,
     userNonce: 7,
     kurierEntropy: 42,
-    N: 1000,
+    N: 1000,  // Public input: modulus for the random number range
   };
 
   const proofData = await orchestrator.generateRandomProof(inputs);
