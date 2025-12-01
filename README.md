@@ -1,216 +1,603 @@
-## zk-RNG Circom Project
+# RandomGen - Zero-Knowledge Random Number Generator
 
-This project implements a minimal zero-knowledge random number generator circuit using Circom 2 and Groth16 (via `snarkjs`).
+A Node.js library for generating and verifying zero-knowledge proofs for a Poseidon-based random number generator using Circom and Groth16.
 
-The circuit:
+## Overview
+
+RandomGen provides a secure, verifiable way to generate random numbers using zero-knowledge proofs. It combines:
+
+- **Circom circuit**: A constraint system that computes a random number from three inputs using Poseidon hashing
+- **Groth16 proofs**: Cryptographic proofs that verify the random number generation without revealing the inputs
+- **Node.js library**: Easy-to-use functions for proof generation, verification, and orchestration
+
+### Circuit Details
+
+The circuit takes three inputs and produces a random number in the range [0, 1000):
 
 - **Public inputs**: `blockHash`, `userNonce`
 - **Private input**: `kurierEntropy` (optional extra entropy)
-- **Output**: `R` — a number in the range \([0, 1000)\)
+- **Output**: `R` = `Poseidon(blockHash, userNonce, kurierEntropy) mod 1000`
 
-`R` is derived by hashing (`Poseidon(3)`) the three inputs and reducing the result modulo 1000.
+## Installation
 
-All logic is implemented in `circuits/random.circom`.
+### Prerequisites
 
----
+Before installing RandomGen, ensure you have:
 
-## Prerequisites
+1. **Node.js** (v14+) and npm
+2. **Circom** (v2+) - globally installed for circuit compilation
+3. **snarkjs** (v0.7+) - globally installed for proof generation and verification
 
-- Node.js & npm
-- Globally installed:
-  - `circom`
-  - `snarkjs`
+Install global dependencies:
 
-Install:
-
+**Circom (v2+)** requires Rust and Cargo:
 ```bash
-npm install -g circom@^2 snarkjs
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install Circom from source
+git clone https://github.com/iden3/circom.git
+cd circom
+cargo build --release
+cargo install --path circom
 ```
 
----
+**snarkjs**:
+```bash
+npm install -g snarkjs@^0.7
+```
+
+### Install RandomGen
+
+```bash
+npm install randomgen
+```
+
+Or for local development:
+
+```bash
+git clone <repository-url>
+cd randomgen
+npm install
+```
+
+## Quick Start
+
+### Basic Usage with Orchestrator (Recommended)
+
+```javascript
+const { RandomCircuitOrchestrator } = require('randomgen');
+
+async function generateRandomProof() {
+  // Create orchestrator instance
+  const orchestrator = new RandomCircuitOrchestrator({
+    circuitName: 'random',
+  });
+
+  // Initialize (generates artifacts if needed)
+  await orchestrator.initialize();
+
+  // Generate proof
+  const inputs = {
+    blockHash: 12345678901234567890n,
+    userNonce: 7,
+    kurierEntropy: 42,
+    N: 1000,
+  };
+
+  const proofData = await orchestrator.generateRandomProof(inputs);
+
+  // Verify proof
+  const isValid = await orchestrator.verifyRandomProof(
+    proofData.proof,
+    proofData.publicSignals
+  );
+
+  console.log('Proof valid:', isValid);
+  console.log('Random output:', proofData.publicSignals[0]);
+}
+
+generateRandomProof().catch(console.error);
+```
+
+### Using Low-Level Utils
+
+```javascript
+const { utils } = require('randomgen');
+
+async function lowLevelExample() {
+  // Create circuit inputs
+  const inputs = await utils.createCircuitInputs({
+    blockHash: 100,
+    userNonce: 200,
+    kurierEntropy: 300,
+    N: 1000,
+  });
+
+  console.log('Circuit inputs:', inputs);
+  // Output: { blockHash: '100', userNonce: '200', kurierEntropy: '300', expectedR: '...' }
+
+  // Generate proof
+  const { proof, publicSignals } = await utils.generateProof(inputs);
+
+  // Verify proof
+  const vkey = utils.loadVerificationKey();
+  const isValid = await utils.verifyProof(vkey, proof, publicSignals);
+
+  console.log('Proof verified:', isValid);
+}
+
+lowLevelExample().catch(console.error);
+```
+
+### Setup and Compilation
+
+For custom circuits or regenerating artifacts:
+
+```javascript
+const { setup } = require('randomgen');
+
+async function setupCircuit() {
+  // Compile circuit
+  const { r1csPath, wasmPath } = await setup.compileCircuit('random');
+
+  // Generate powers of tau
+  await setup.ensurePtauFile(12, 'pot12_final.ptau');
+
+  // Run Groth16 setup
+  await setup.setupGroth16(r1csPath, 'pot12_final.ptau', 'build/random_final.zkey');
+
+  // Export verification key
+  await setup.exportVerificationKey(
+    'build/random_final.zkey',
+    'build/verification_key.json'
+  );
+
+  console.log('Setup complete!');
+}
+
+// Or use the convenience function:
+await setup.completeSetup('random', {
+  power: 12,
+  circuitPath: 'circuits/random.circom',
+});
+```
+
+## API Reference
+
+### RandomCircuitOrchestrator
+
+High-level orchestrator for managing the complete ZK proof workflow.
+
+#### Constructor
+
+```javascript
+new RandomCircuitOrchestrator(options)
+```
+
+- `options.circuitName` (string, default: `"random"`): Circuit name
+- `options.buildDir` (string, default: `"./build"`): Build directory path
+
+#### Methods
+
+##### `initialize(options)`
+
+Initializes the orchestrator and generates artifacts if needed.
+
+```javascript
+await orchestrator.initialize({
+  circuitPath: 'circuits/random.circom',
+  power: 12,
+  ptauName: 'pot12_final.ptau',
+});
+```
+
+Returns: `boolean` - Success status
+
+##### `validateBuildArtifacts()`
+
+Checks if all required build artifacts exist.
+
+```javascript
+const validation = orchestrator.validateBuildArtifacts();
+// { isValid: true, missingFiles: [] }
+```
+
+##### `generateRandomProof(inputs, setupOptions)`
+
+Generates a complete ZK proof with verification.
+
+```javascript
+const result = await orchestrator.generateRandomProof(inputs, setupOptions);
+// { proof, publicSignals, witness, isValid }
+```
+
+- `inputs`: Object with `blockHash`, `userNonce`, `kurierEntropy`, `N`
+- `setupOptions`: Optional setup configuration
+
+##### `verifyRandomProof(proof, publicSignals)`
+
+Verifies a generated proof.
+
+```javascript
+const isValid = await orchestrator.verifyRandomProof(proof, publicSignals);
+```
+
+##### `computeLocalHash(inputs)`
+
+Computes the local Poseidon hash and random value.
+
+```javascript
+const { hash, R } = await orchestrator.computeLocalHash(inputs);
+```
+
+##### `saveProofData(proofData, outputDir)`
+
+Saves proof data to JSON files.
+
+```javascript
+await orchestrator.saveProofData(proofData, 'proofs/');
+```
+
+##### `loadProofData(proofFile, publicSignalsFile)`
+
+Loads proof data from JSON files.
+
+```javascript
+const { proof, publicSignals } = await orchestrator.loadProofData(
+  'proofs/proof.json',
+  'proofs/public.json'
+);
+```
+
+### Utils Functions
+
+Core cryptographic and utility functions.
+
+#### `computePoseidonHash(input1, input2, input3)`
+
+Computes Poseidon hash of three inputs.
+
+```javascript
+const hash = await computePoseidonHash(1, 2, 3);
+// Returns: BigInt
+```
+
+#### `generateRandomFromSeed(seed, N)`
+
+Generates random number from seed using modulo operation.
+
+```javascript
+const random = generateRandomFromSeed(seed, 1000);
+// Returns: BigInt (value in [0, N))
+```
+
+#### `createCircuitInputs(inputs)`
+
+Creates properly formatted inputs for the circuit.
+
+```javascript
+const circuitInputs = await createCircuitInputs({
+  blockHash: 100,
+  userNonce: 200,
+  kurierEntropy: 300,
+  N: 1000,
+});
+// Returns: { blockHash, userNonce, kurierEntropy, expectedR }
+```
+
+#### `generateProof(inputs, circuitName)`
+
+Generates a Groth16 proof.
+
+```javascript
+const { proof, publicSignals } = await generateProof(inputs);
+// Returns: { proof, publicSignals }
+```
+
+#### `verifyProof(vkey, proof, publicSignals)`
+
+Verifies a proof against the verification key.
+
+```javascript
+const isValid = await verifyProof(vkey, proof, publicSignals);
+// Returns: boolean
+```
+
+#### `loadVerificationKey(filename)`
+
+Loads verification key from JSON file.
+
+```javascript
+const vkey = loadVerificationKey('verification_key.json');
+```
+
+#### `fullWorkflow(inputs, circuitName)`
+
+Executes complete workflow: create inputs → generate proof → verify.
+
+```javascript
+const result = await fullWorkflow(inputs);
+// Returns: { inputs, proof, publicSignals, isValid }
+```
+
+### Setup Functions
+
+Circuit compilation and artifact generation functions.
+
+#### `completeSetup(circuitName, options)`
+
+Orchestrates complete setup workflow.
+
+```javascript
+await completeSetup('random', {
+  circuitPath: 'circuits/random.circom',
+  power: 12,
+  ptauName: 'pot12_final.ptau',
+});
+```
+
+#### `compileCircuit(circuitName, circuitPath)`
+
+Compiles Circom circuit to R1CS and WASM.
+
+```javascript
+const { r1csPath, wasmPath } = await compileCircuit('random');
+```
+
+#### `setupGroth16(r1csPath, ptauPath, zkeyPath)`
+
+Generates Groth16 proving key (zkey).
+
+```javascript
+await setupGroth16('build/random.r1cs', 'pot12_final.ptau', 'build/random_final.zkey');
+```
+
+#### `exportVerificationKey(zkeyPath, vkeyPath)`
+
+Extracts verification key from zkey file.
+
+```javascript
+await exportVerificationKey('build/random_final.zkey', 'build/verification_key.json');
+```
+
+#### `ensurePtauFile(power, ptauName)`
+
+Creates or verifies Powers of Tau file.
+
+```javascript
+await ensurePtauFile(12, 'pot12_final.ptau');
+```
 
 ## Project Structure
 
-- `circuits/random.circom` — Poseidon-based RNG circuit
-- `input.json` — example inputs for witness/proof generation
-- `scripts/` — shell scripts for compilation, setup, proving, and verification
-  - `compile.sh` — compile circuit to R1CS + WASM
-  - `setup_groth16.sh` — Groth16 trusted setup (uses a Powers of Tau file)
-  - `prove.sh` — generate witness, proof, and public signals
-  - `verify.sh` — verify proof locally
-  - `run.sh` — convenience wrapper to run with CLI arguments
-- `build/` — compilation and proof artifacts (created as you run scripts)
-- `arkworks-converter/` — Rust tool to convert snarkjs format to arkworks format
-- `arkworks/` — output directory with arkworks-native format files (binary + JSON)
-
----
-
-## Step 1: Compile the circuit
-
-From the project root (`/home/strummer/randomgen`):
-
-```bash
-./scripts/compile.sh
+```
+randomgen/
+├── index.js                 # Main entry point (library exports)
+├── package.json             # Project metadata and dependencies
+├── README.md                # This file
+├── jest.config.cjs          # Jest configuration for tests
+├── circuits/
+│   └── random.circom        # Circom circuit implementation
+├── lib/
+│   ├── utils.js             # Core cryptographic utilities
+│   ├── orchestrator.js      # High-level orchestrator
+│   └── setupArtifacts.js    # Setup and compilation utilities
+├── tests/
+│   ├── random.test.cjs      # Circuit tests
+│   ├── utils.test.cjs       # Utils function tests
+│   ├── orchestrator.test.cjs # Orchestrator tests
+│   └── setupArtifacts.test.cjs # Setup utility tests
+├── build/                   # Generated artifacts (created at runtime)
+│   ├── random.r1cs          # Circuit R1CS file
+│   ├── random.wasm          # Circuit WASM file
+│   ├── random_final.zkey    # Groth16 proving key
+│   └── verification_key.json # Verification key
+└── scripts/
+    ├── compile.sh           # Compile circuit
+    ├── setup_groth16.sh     # Generate setup artifacts
+    ├── prove.sh             # Generate proof
+    └── verify.sh            # Verify proof
 ```
 
-This produces:
+## Testing
 
-- `build/random.r1cs`
-- `build/random.wasm`
-- `build/random.sym`
-
----
-
-## Step 2: Powers of Tau (ptau) and Groth16 setup
-
-You need a **Powers of Tau** file (e.g. `pot12_final.ptau`) in the project root.
-
-For local/dev usage (not secure for production), you can generate one like this:
+Run the test suite:
 
 ```bash
-snarkjs powersoftau new bn128 12 pot12_0000.ptau
-snarkjs powersoftau contribute pot12_0000.ptau pot12_final.ptau --name="kurier dev" -v
+npm test
 ```
 
-Then run the Groth16 setup:
+Run tests in watch mode:
 
 ```bash
-./scripts/setup_groth16.sh
+npm run test:watch
 ```
 
-This writes:
+Test coverage includes:
+- Unit tests for all utility functions
+- Orchestrator class tests
+- Circuit validation tests
+- Integration tests for complete workflows
+- Edge cases and error handling
 
-- `build/random_0000.zkey`
-- `build/random_final.zkey` (proving key)
-- `build/verification_key.json` (verification key)
+## Common Workflows
 
----
+### 1. Generate and Verify a Random Proof
 
-## Step 3: Prepare inputs
+```javascript
+const { RandomCircuitOrchestrator } = require('randomgen');
 
-Option A (manual file): edit `input.json`, then call `./scripts/prove.sh` and `./scripts/verify.sh` in later steps.
+async function demo() {
+  const orchestrator = new RandomCircuitOrchestrator();
+  
+  // Initialize (generates artifacts if needed)
+  await orchestrator.initialize();
+  
+  // Generate proof
+  const inputs = {
+    blockHash: 12345678901234567890n,
+    userNonce: 7,
+    kurierEntropy: 42,
+    N: 1000,
+  };
+  
+  const result = await orchestrator.generateRandomProof(inputs);
+  
+  console.log('Valid:', result.isValid);
+  console.log('Random value:', result.publicSignals[0]);
+  
+  // Save proof data
+  await orchestrator.saveProofData(result, './proofs');
+}
 
-```json
-{
-  "blockHash": "0xc9ccb486624046360c2523d3fb3dc8112dfe0c3e90d1896605dfbe363f9c0001",
-  "userNonce": 7,
-  "kurierEntropy": 42
+demo().catch(console.error);
+```
+
+### 2. Batch Proof Generation
+
+```javascript
+const { RandomCircuitOrchestrator } = require('randomgen');
+
+async function generateBatch() {
+  const orchestrator = new RandomCircuitOrchestrator();
+  await orchestrator.initialize();
+  
+  const proofs = [];
+  
+  for (let i = 0; i < 10; i++) {
+    const result = await orchestrator.generateRandomProof({
+      blockHash: BigInt(i),
+      userNonce: i,
+      kurierEntropy: i + 1,
+      N: 1000,
+    });
+    
+    proofs.push(result);
+  }
+  
+  return proofs;
 }
 ```
 
-- **blockHash**: public value (e.g. on-chain block hash)
-- **userNonce**: user-provided public nonce
-- **kurierEntropy**: private entropy from Kurier (or any backend)
+### 3. Custom Orchestrator Configuration
 
-### Option B: pass inputs via CLI (no manual `input.json`)
+```javascript
+const { RandomCircuitOrchestrator } = require('randomgen');
 
-Use this if you prefer one shot execution; it internally creates its own JSON and runs both `prove.sh` and `verify.sh`:
+async function customSetup() {
+  const orchestrator = new RandomCircuitOrchestrator({
+    circuitName: 'custom-random',
+    buildDir: '/custom/build/path',
+  });
+  
+  await orchestrator.initialize({
+    circuitPath: 'circuits/custom.circom',
+    power: 13,
+    ptauName: 'custom_pot.ptau',
+  });
+  
+  // Use as normal
+  const result = await orchestrator.generateRandomProof({ /* ... */ });
+}
+```
 
+## Troubleshooting
+
+### "circom: command not found"
+Install Circom from source (requires Rust and Cargo):
 ```bash
-./scripts/run.sh <blockHash> <userNonce> <kurierEntropy>
+# Install Rust if needed
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Clone and build Circom
+git clone https://github.com/iden3/circom.git
+cd circom
+cargo build --release
+cargo install --path circom
 ```
 
-Example:
-
+### "snarkjs: command not found"
+Install snarkjs globally:
 ```bash
-./scripts/run.sh 123456 7 42
+npm install -g snarkjs@^0.7
 ```
 
-You can also pass a **hex block hash** (e.g. from Ethereum) and it will be converted to decimal automatically:
-
+### "Cannot find module 'randomgen'"
+Ensure the package is installed:
 ```bash
-./scripts/run.sh 0xd9885ce1b0330741ce78b3e781fbc131f22f2bd40eb1dc41f6b7844f47ec7c54 7 42
+npm install randomgen
 ```
 
-This script will:
-
-1. Build a temporary JSON file at `build/input_cli.json` with those values.
-2. Call `./scripts/prove.sh` using that file.
-3. Run `./scripts/verify.sh` to check the proof.
-
----
-
-## Step 4: Generate proof
-
-Run:
-
+Or for local development, link the local package:
 ```bash
-./scripts/prove.sh
+cd randomgen
+npm link
+cd /path/to/your/project
+npm link randomgen
 ```
 
-This:
-
-1. Generates a witness using `snarkjs wtns calculate build/random.wasm ...`
-2. Runs `snarkjs groth16 prove` to create:
-   - `build/proof.json`
-   - `build/public.json`
-
-`scripts/prove.sh` also **prints the result to the console** in a friendly format:
-
-```text
-=== zk-RNG Result ===
-R (mixed output): <big number here>
-blockHash (decimal): <decimal form of your blockHash>
-userNonce: <your nonce>
-kurierEntropy: <your entropy>
-=====================
+### Build artifacts missing
+Artifacts are generated automatically on first use via `initialize()`:
+```javascript
+await orchestrator.initialize();
 ```
 
-`public.json` contains:
-
-- The public inputs (`blockHash`, `userNonce`)
-- The output `R`
-
----
-
-## Step 5: Verify proof
-
-Run:
-
-```bash
-./scripts/verify.sh
+To manually regenerate:
+```javascript
+const { setup } = require('randomgen');
+await setup.completeSetup('random');
 ```
 
-If everything is correct, `snarkjs` prints that the proof is valid.
+### Verification fails
+Ensure:
+1. Same verification key is used as was generated during setup
+2. Proof hasn't been tampered with
+3. Public signals match the input values
+4. Build artifacts are present and valid
 
----
+## Performance Considerations
 
-## Optional: Send proofs via Kurier (Horizen Relayer client)
+- **First run**: ~30-60 seconds (circuit compilation and setup)
+- **Proof generation**: ~1-2 seconds per proof
+- **Proof verification**: ~100-200ms per proof
+- **Batch operations**: Process proofs sequentially or with limited concurrency
 
-If you want to exercise Horizen's Relayer API (per the [tutorial](https://relayer.horizenlabs.io/docs/tutorial)), this repo ships a lightweight Node client under `kurier/`.
+## Security Notes
 
-1. **Configure environment**
-   ```bash
-   cd kurier
-   cp env.example .env
-   # edit .env and set:
-   #   API_KEY=<your relayer key>
-   #   API_URL (optional, defaults to testnet)
-   #   CHAIN_ID (optional, defaults to 0 = off-chain test)
-   ```
+⚠️ **Important**: This library is for educational and development purposes. For production use:
 
-2. **Install Kurier client deps** (first run only)
-   ```bash
-   cd kurier
-   npm install
-   ```
+1. Use a secure Powers of Tau ceremony (not the dev pot files)
+2. Generate your own circuit artifacts in a secure environment
+3. Store verification keys securely
+4. Audit the circuit implementation
+5. Consider using a hardware security module (HSM) for key management
 
-3. **Regenerate zk artifacts** (from repo root) so `build/verification_key.json`, `build/proof.json`, and `build/public.json` are fresh:
-   ```bash
-   ./scripts/run.sh <blockHash> <userNonce> <kurierEntropy>
-   ```
+## License
 
-4. **Run Kurier**
-   ```bash
-   cd kurier
-   node index.js
-   ```
+ISC
 
-   The script will:
-   - Register the Groth16 verification key (result cached in `kurier/circom-vkey.json`)
-   - Submit the proof/public signals
-   - Poll job status until it reaches `Finalized`/`Aggregated`
+## Contributing
 
-All Relayer responses (`vkHash`, `jobId`, `txHash`, etc.) are printed to the console so you can trace them in the zkVerify explorer or via the Relayer API.
+Contributions are welcome! Please ensure:
+- All tests pass (`npm test`)
+- Code follows the existing style
+- New features include tests
+- README is updated with new functionality
+
+## Support
+
+For issues, questions, or contributions:
+1. Check the existing tests for usage examples
+2. Review the API documentation above
+3. Open an issue with detailed information about your problem
+
+## Related Resources
+
+- [Circom Documentation](https://docs.circom.io/)
+- [snarkjs Documentation](https://github.com/iden3/snarkjs)
+- [Poseidon Hash](https://www.poseidon-hash.info/)
+- [Groth16 Protocol](https://eprint.iacr.org/2016/260.pdf)
+- [Zero-Knowledge Proofs Introduction](https://blog.cryptographyengineering.com/2014/11/27/zero-knowledge-proofs-illustrated-primer/)
 
 

@@ -1,34 +1,47 @@
+pragma circom 2.0.0;
+
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "../node_modules/circomlib/circuits/comparators.circom";
-include "../node_modules/circomlib/circuits/bitify.circom";
 
-template RandomCircuit() {
+template RandomCircuit(nBits) {
+    // Public inputs
     signal input blockHash;
     signal input userNonce;
+    signal input N;
+    assert(N > 0); // Ensure N is positive
+    
+    // Private input
     signal input kurierEntropy;
-    signal output R;
 
-    // Hash the 3 inputs with Poseidon
+    // Step 1: Compute Poseidon hash of the three inputs
     component poseidon = Poseidon(3);
     poseidon.inputs[0] <== blockHash;
     poseidon.inputs[1] <== userNonce;
     poseidon.inputs[2] <== kurierEntropy;
+    
+    signal hash <== poseidon.out;
 
-    // Seed is the hash output
-    signal seed;
-    seed <== poseidon.out;
+    // Step 2: Compute R = hash mod N
+    // We need: hash = quotient * N + R, where 0 < R < N
+    signal quotient <-- hash \ N;
+    signal output R <-- hash % N;
 
-    // R = seed mod 1000
-    signal quotient;
-    component quotientBits = Num2Bits(254);
-    quotientBits.in <== quotient;
-    seed === quotient * 1000 + R;
+    // Ensure Quotient and Remainder fit in 'n' bits to prevent overflow attacks
+    component qCheck = Num2Bits(nBits);
+    qCheck.in <== quotient;
+    
+    component rCheck = Num2Bits(nBits);
+    rCheck.in <== R;
 
-    // Ensure R < 1000
-    component lt = LessThan(16);
-    lt.in[0] <== R;
-    lt.in[1] <== 1000;
-    lt.out === 1;
+    // Step 3: Verify the modulo decomposition
+    hash === quotient * N + R;
+
+    // Step 4: Ensure R is in the range [0, N)
+    component isLess = LessThan(nBits);
+    isLess.in[0] <== R;
+    isLess.in[1] <== N;
+    isLess.out === 1; // R < N
 }
 
-component main = RandomCircuit();
+component main {public [blockHash, userNonce, N]} = RandomCircuit(252);
+
