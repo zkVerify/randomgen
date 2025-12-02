@@ -11,7 +11,7 @@ const buildDir = path.join(rootDir, "build");
 describe("Orchestrator Module - Complete Function Coverage", () => {
     let orchestrator;
 
-    afterAll(() => {
+    afterEach(() => {
         // Clean up build directory after all tests
         if (fs.existsSync(buildDir)) {
             fs.rmSync(buildDir, { recursive: true });
@@ -66,40 +66,28 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
         it("should identify missing WASM file", () => {
             const validation = orchestrator.validateBuildArtifacts();
             const hasWasm = validation.missingFiles.some(f => f.includes(".wasm"));
-            // Either it's missing or it exists (both are valid states)
-            expect(validation).toBeDefined();
+            expect(hasWasm).toBe(true);
         });
 
         it("should identify missing zkey file", () => {
             const validation = orchestrator.validateBuildArtifacts();
             const hasZkey = validation.missingFiles.some(f => f.includes(".zkey"));
-            // Either it's missing or it exists (both are valid states)
-            expect(validation).toBeDefined();
+            expect(hasZkey).toBe(true);
         });
 
         it("should identify missing verification key", () => {
             const validation = orchestrator.validateBuildArtifacts();
             const hasVkey = validation.missingFiles.some(f => f.includes("verification"));
-            // Either it's missing or it exists (both are valid states)
-            expect(validation).toBeDefined();
+            expect(hasVkey).toBe(true);
         });
 
-        it("should return isValid=true when all files exist", () => {
-            const wasmPath = path.join(buildDir, "random_js/random.wasm");
-            const zkeyPath = path.join(buildDir, "random_final.zkey");
-            const vkeyPath = path.join(buildDir, "verification_key.json");
-
-            const allExist =
-                fs.existsSync(wasmPath) &&
-                fs.existsSync(zkeyPath) &&
-                fs.existsSync(vkeyPath);
+        it("should return isValid=true when all files exist", async () => {
+            await orchestrator.initialize();
 
             const validation = orchestrator.validateBuildArtifacts();
-            if (allExist) {
-                expect(validation.isValid).toBe(true);
-                expect(validation.missingFiles.length).toBe(0);
-            }
-        });
+            expect(validation.isValid).toBe(true);
+            expect(validation.missingFiles.length).toBe(0);
+        }, 30000);
 
         it("should work with custom circuit names", () => {
             const customOrch = new RandomCircuitOrchestrator({
@@ -116,14 +104,14 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
         it("should initialize orchestrator without error", async () => {
             const result = await orchestrator.initialize();
             expect(typeof result).toBe("boolean");
+            expect(result).toBe(true);
         }, 30000);
 
         it("should load verification key on successful initialization", async () => {
             const vkeyPath = path.join(buildDir, "verification_key.json");
-            if (fs.existsSync(vkeyPath)) {
-                await orchestrator.initialize();
-                expect(orchestrator.vkey).toBeDefined();
-            }
+            await orchestrator.initialize();
+            expect(orchestrator.vkey).toBeDefined();
+            expect(fs.existsSync(vkeyPath)).toBe(true);
         }, 30000);
 
         it("should accept setupOptions", async () => {
@@ -131,7 +119,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 power: 12,
             };
             const result = await orchestrator.initialize(options);
-            expect(typeof result).toBe("boolean");
+            expect(result).toBe(true);
         }, 30000);
     });
 
@@ -183,8 +171,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             };
             const result1 = await computeLocalHash(inputs);
             const result2 = await computeLocalHash(inputs);
-            expect(result1.hash).toBe(result2.hash);
-            expect(result1.R).toBe(result2.R);
+            expect(result1.hash).toEqual(result2.hash);
+            expect(result1.R).toEqual(result2.R);
         });
 
         it("should produce different results for different inputs", async () => {
@@ -200,18 +188,20 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             };
             const result1 = await computeLocalHash(inputs1);
             const result2 = await computeLocalHash(inputs2);
-            expect(result1.hash).not.toBe(result2.hash);
+            expect(result1.hash).not.toEqual(result2.hash);
         });
 
         it("should handle large N values", async () => {
+            const nBigNum = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495616");
             const inputs = {
                 blockHash: 999,
                 userNonce: 888,
                 kurierEntropy: 777,
-                N: BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495616"),
+                N: nBigNum,
             };
             const result = await computeLocalHash(inputs);
             expect(BigInt(result.R)).toBeGreaterThanOrEqual(0n);
+            expect(BigInt(result.R)).toBeLessThan(nBigNum);
         });
 
         it("should handle N=1", async () => {
@@ -222,7 +212,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 N: 1n,
             };
             const result = await computeLocalHash(inputs);
-            expect(result.R).toBe("0");
+            expect(result.R).toEqual("0");
         });
     });
 
@@ -250,12 +240,9 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             expect(result.files.publicSignals).toBeDefined();
             expect(result.files.R).toBeDefined();
 
-            // Verify files exist
-            if (result.success) {
-                expect(fs.existsSync(result.files.proof)).toBe(true);
-                expect(fs.existsSync(result.files.publicSignals)).toBe(true);
-                expect(fs.existsSync(result.files.R)).toBe(true);
-            }
+            expect(fs.existsSync(result.files.proof)).toBe(true);
+            expect(fs.existsSync(result.files.publicSignals)).toBe(true);
+            expect(fs.existsSync(result.files.R)).toBe(true);
         });
 
         it("should handle errors gracefully", async () => {
@@ -291,15 +278,13 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             };
 
             const saveResult = await orchestrator.saveProofData(proofData, buildDir);
-            if (saveResult.success) {
-                const loadResult = orchestrator.loadProofData(
-                    saveResult.files.proof,
-                    saveResult.files.publicSignals
-                );
-                expect(loadResult.success).toBe(true);
-                expect(loadResult.proof).toBeDefined();
-                expect(loadResult.publicSignals).toBeDefined();
-            }
+            const loadResult = orchestrator.loadProofData(
+                saveResult.files.proof,
+                saveResult.files.publicSignals
+            );
+            expect(loadResult.success).toBe(true);
+            expect(loadResult.proof).toBeDefined();
+            expect(loadResult.publicSignals).toBeDefined();
         });
     });
 
@@ -312,12 +297,14 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const result = await orchestrator.verifyRandomProof(proof, publicSignals);
             expect(result).toHaveProperty("isValid");
             expect(typeof result.isValid).toBe("boolean");
+            expect(result.isValid).toBe(false);
         }, 30000);
 
         it("should return error for invalid proof format", async () => {
             const result = await orchestrator.verifyRandomProof(null, null);
             expect(result).toHaveProperty("isValid");
             expect(result).toHaveProperty("error");
+            expect(result.isValid).toBe(false);
         }, 30000);
     });
 
@@ -334,6 +321,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const result = await orchestrator.generateRandomProof(inputs);
             expect(result).toHaveProperty("success");
             expect(typeof result.success).toBe("boolean");
+            expect(result.success).toBe(true);
         }, 60000);
 
         it("should accept setupOptions", async () => {
@@ -347,17 +335,12 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
             const result = await orchestrator.generateRandomProof(inputs, options);
             expect(result).toHaveProperty("success");
+            expect(result.success).toBe(true);
         }, 60000);
     });
 
     // ===== INTEGRATION TESTS =====
     describe("Integration Tests", () => {
-        it("should validate artifacts before processing", () => {
-            const validation = orchestrator.validateBuildArtifacts();
-            expect(validation.isValid).toBe(
-                validation.missingFiles.length === 0
-            );
-        });
 
         it("should work with multiple orchestrator instances", () => {
             const orch1 = new RandomCircuitOrchestrator({ circuitName: "random" });
@@ -369,20 +352,5 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             expect(val1).toBeDefined();
             expect(val2).toBeDefined();
         });
-
-        it("should handle workflow with valid artifacts", async () => {
-            const wasmPath = path.join(buildDir, "random_js/random.wasm");
-            const zkeyPath = path.join(buildDir, "random_final.zkey");
-            const vkeyPath = path.join(buildDir, "verification_key.json");
-
-            if (
-                fs.existsSync(wasmPath) &&
-                fs.existsSync(zkeyPath) &&
-                fs.existsSync(vkeyPath)
-            ) {
-                await orchestrator.initialize();
-                expect(orchestrator.vkey).toBeDefined();
-            }
-        }, 30000);
     });
 });
