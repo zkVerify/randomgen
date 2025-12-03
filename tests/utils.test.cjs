@@ -140,10 +140,10 @@ describe("Utils Module - Complete Function Coverage", () => {
                 N: 1000,
             };
             const circuitInputs = await createCircuitInputs(inputs);
-            expect(circuitInputs).toHaveProperty("blockHash");
-            expect(circuitInputs).toHaveProperty("userNonce");
-            expect(circuitInputs).toHaveProperty("kurierEntropy");
-            expect(circuitInputs).toHaveProperty("N");
+            expect(circuitInputs.blockHash).toBeDefined();
+            expect(circuitInputs.userNonce).toBeDefined();
+            expect(circuitInputs.kurierEntropy).toBeDefined();
+            expect(circuitInputs.N).toBeDefined();
         });
 
         it("should use default N=1000 if not provided", async () => {

@@ -9,3 +9,5 @@ pot12_final.ptau
 kurier/.env
 kurier/node_modules/
 kurier/circom-vkey.json
+examples/proofs/
+*.ptau

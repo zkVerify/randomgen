@@ -60,8 +60,8 @@ describe("SetupArtifacts Module - Complete Function Coverage", () => {
             const circuitPath = path.join(circuitDir, "random.circom");
 
             const result = await compileCircuit("random", circuitPath);
-            expect(result).toHaveProperty("r1csPath");
-            expect(result).toHaveProperty("wasmPath");
+            expect(result.r1csPath).toBeDefined();
+            expect(result.wasmPath).toBeDefined();
             expect(typeof result.r1csPath).toBe("string");
             expect(typeof result.wasmPath).toBe("string");
             expect(fs.existsSync(result.r1csPath)).toBe(true);
@@ -76,8 +76,8 @@ describe("SetupArtifacts Module - Complete Function Coverage", () => {
 
         it("should use default circuit path if not provided", async () => {
             const result = await compileCircuit("random");
-            expect(result).toHaveProperty("r1csPath");
-            expect(result).toHaveProperty("wasmPath");
+            expect(result.r1csPath).toBeDefined();
+            expect(result.wasmPath).toBeDefined();
             expect(typeof result.r1csPath).toBe("string");
             expect(typeof result.wasmPath).toBe("string");
             expect(fs.existsSync(result.r1csPath)).toBe(true);
@@ -167,7 +167,7 @@ describe("SetupArtifacts Module - Complete Function Coverage", () => {
             const vkey = await exportVerificationKey(zkeyPath, vkeyPath);
             expect(vkey).toBeDefined();
             expect(typeof vkey).toBe("object");
-            expect(vkey).toHaveProperty("protocol");
+            expect(vkey.protocol).toBeDefined();
             expect(fs.existsSync(vkeyPath)).toBe(true);
 
             // Vkey deserialized matches original
@@ -186,15 +186,15 @@ describe("SetupArtifacts Module - Complete Function Coverage", () => {
                 power: 12,
             });
             expect(result).toBeDefined();
-            expect(result).toHaveProperty("r1csPath");
+            expect(result.r1csPath).toBeDefined();
             expect(fs.existsSync(result.r1csPath)).toBe(true);
-            expect(result).toHaveProperty("wasmPath");
+            expect(result.wasmPath).toBeDefined();
             expect(fs.existsSync(result.wasmPath)).toBe(true);
-            expect(result).toHaveProperty("ptauPath");
+            expect(result.ptauPath).toBeDefined();
             expect(fs.existsSync(result.ptauPath)).toBe(true);
-            expect(result).toHaveProperty("zkeyPath");
+            expect(result.zkeyPath).toBeDefined();
             expect(fs.existsSync(result.zkeyPath)).toBe(true);
-            expect(result).toHaveProperty("vkeyPath");
+            expect(result.vkeyPath).toBeDefined();
             expect(fs.existsSync(result.vkeyPath)).toBe(true);
 
         }, 300000);
@@ -211,15 +211,15 @@ describe("SetupArtifacts Module - Complete Function Coverage", () => {
         it("should use default options if not provided", async () => {
             const result = await completeSetup("random");
             expect(result).toBeDefined();
-            expect(result).toHaveProperty("r1csPath");
+            expect(result.r1csPath).toBeDefined();
             expect(fs.existsSync(result.r1csPath)).toBe(true);
-            expect(result).toHaveProperty("wasmPath");
+            expect(result.wasmPath).toBeDefined();
             expect(fs.existsSync(result.wasmPath)).toBe(true);
-            expect(result).toHaveProperty("ptauPath");
+            expect(result.ptauPath).toBeDefined();
             expect(fs.existsSync(result.ptauPath)).toBe(true);
-            expect(result).toHaveProperty("zkeyPath");
+            expect(result.zkeyPath).toBeDefined();
             expect(fs.existsSync(result.zkeyPath)).toBe(true);
-            expect(result).toHaveProperty("vkeyPath");
+            expect(result.vkeyPath).toBeDefined();
             expect(fs.existsSync(result.vkeyPath)).toBe(true);
         }, 300000);
 

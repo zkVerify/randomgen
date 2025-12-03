@@ -1,8 +1,0 @@
-{
-  "inputs": {
-    "blockHash": "12345678901234567890",
-    "userNonce": "7",
-    "kurierEntropy": "42",
-    "N": "1000"
-  }
-}

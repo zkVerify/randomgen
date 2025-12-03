@@ -57,8 +57,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     describe("validateBuildArtifacts()", () => {
         it("should return validation object with isValid and missingFiles properties", () => {
             const validation = orchestrator.validateBuildArtifacts();
-            expect(validation).toHaveProperty("isValid");
-            expect(validation).toHaveProperty("missingFiles");
+            expect(validation.isValid).toBeDefined();
+            expect(validation.missingFiles).toBeDefined();
             expect(typeof validation.isValid).toBe("boolean");
             expect(Array.isArray(validation.missingFiles)).toBe(true);
         });
@@ -94,8 +94,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 circuitName: "custom",
             });
             const validation = customOrch.validateBuildArtifacts();
-            expect(validation).toHaveProperty("isValid");
-            expect(validation).toHaveProperty("missingFiles");
+            expect(validation.isValid).toBeDefined();
+            expect(validation.missingFiles).toBeDefined();
         });
     });
 
@@ -129,8 +129,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 kurierEntropy: 300,
             };
             const result = await computeLocalHash(inputs);
-            expect(result).toHaveProperty("hash");
-            expect(result).toHaveProperty("R");
+            expect(result.hash).toBeDefined();
+            expect(result.R).toBeDefined();
             expect(typeof result.hash).toBe("string");
             expect(typeof result.R).toBe("string");
         });
@@ -310,10 +310,10 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             };
 
             const result = await orchestrator.generateRandomProof(inputs);
-            expect(result).toHaveProperty("proof");
-            expect(result).toHaveProperty("publicSignals");
-            expect(result).toHaveProperty("R");
-            expect(result).toHaveProperty("circuitInputs");
+            expect(result.proof).toBeDefined();
+            expect(result.publicSignals).toBeDefined();
+            expect(result.R).toBeDefined();
+            expect(result.circuitInputs).toBeDefined();
         }, 60000);
 
         it("should accept setupOptions", async () => {
@@ -326,8 +326,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const options = { power: 12 };
 
             const result = await orchestrator.generateRandomProof(inputs, options);
-            expect(result).toHaveProperty("proof");
-            expect(result).toHaveProperty("publicSignals");
+            expect(result.proof).toBeDefined();
+            expect(result.publicSignals).toBeDefined();
         }, 60000);
     });
 
