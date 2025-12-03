@@ -102,9 +102,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     // ===== INITIALIZE TESTS =====
     describe("initialize()", () => {
         it("should initialize orchestrator without error", async () => {
-            const result = await orchestrator.initialize();
-            expect(typeof result).toBe("boolean");
-            expect(result).toBe(true);
+            await expect(orchestrator.initialize()).resolves.not.toThrow();
         }, 30000);
 
         it("should load verification key on successful initialization", async () => {
@@ -118,8 +116,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const options = {
                 power: 12,
             };
-            const result = await orchestrator.initialize(options);
-            expect(result).toBe(true);
+            await expect(orchestrator.initialize(options)).resolves.not.toThrow();
         }, 30000);
     });
 
@@ -233,35 +230,32 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 },
             };
 
-            const result = await orchestrator.saveProofData(proofData, buildDir);
-            expect(result.success).toBe(true);
-            expect(result.files).toBeDefined();
-            expect(result.files.proof).toBeDefined();
-            expect(result.files.publicSignals).toBeDefined();
-            expect(result.files.R).toBeDefined();
+            const files = await orchestrator.saveProofData(proofData, buildDir);
+            expect(files).toBeDefined();
+            expect(files.proof).toBeDefined();
+            expect(files.publicSignals).toBeDefined();
+            expect(files.R).toBeDefined();
 
-            expect(fs.existsSync(result.files.proof)).toBe(true);
-            expect(fs.existsSync(result.files.publicSignals)).toBe(true);
-            expect(fs.existsSync(result.files.R)).toBe(true);
+            expect(fs.existsSync(files.proof)).toBe(true);
+            expect(fs.existsSync(files.publicSignals)).toBe(true);
+            expect(fs.existsSync(files.R)).toBe(true);
         });
 
-        it("should handle errors gracefully", async () => {
+        it("should throw error for invalid input", async () => {
             const proofData = null;
-            const result = await orchestrator.saveProofData(proofData, "/invalid/path");
-            expect(result.success).toBe(false);
-            expect(result.error).toBeDefined();
+            await expect(
+                orchestrator.saveProofData(proofData, "/invalid/path")
+            ).rejects.toThrow();
         });
     });
 
     // ===== LOAD PROOF DATA TESTS =====
     describe("loadProofData()", () => {
-        it("should return error if proof file does not exist", () => {
-            const result = orchestrator.loadProofData(
+        it("should throw error if proof file does not exist", () => {
+            expect(() => orchestrator.loadProofData(
                 "/nonexistent/proof.json",
                 "/nonexistent/public.json"
-            );
-            expect(result.success).toBe(false);
-            expect(result.error).toBeDefined();
+            )).toThrow();
         });
 
         it("should load proof data if files exist", async () => {
@@ -277,40 +271,37 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 circuitInputs: { blockHash: "123" },
             };
 
-            const saveResult = await orchestrator.saveProofData(proofData, buildDir);
-            const loadResult = orchestrator.loadProofData(
-                saveResult.files.proof,
-                saveResult.files.publicSignals
+            const files = await orchestrator.saveProofData(proofData, buildDir);
+            const loaded = orchestrator.loadProofData(
+                files.proof,
+                files.publicSignals
             );
-            expect(loadResult.success).toBe(true);
-            expect(loadResult.proof).toBeDefined();
-            expect(loadResult.publicSignals).toBeDefined();
+            expect(loaded.proof).toBeDefined();
+            expect(loaded.publicSignals).toBeDefined();
         });
     });
 
     // ===== VERIFY PROOF TESTS =====
     describe("verifyRandomProof()", () => {
-        it("should handle verification without initialization", async () => {
+        it("should return false for invalid proof", async () => {
             const proof = { pi_a: ["1"], pi_b: [["2"], ["3"]], pi_c: ["4"] };
             const publicSignals = ["100"];
 
-            const result = await orchestrator.verifyRandomProof(proof, publicSignals);
-            expect(result).toHaveProperty("isValid");
-            expect(typeof result.isValid).toBe("boolean");
-            expect(result.isValid).toBe(false);
+            await expect(
+                orchestrator.verifyRandomProof(proof, publicSignals)
+            ).rejects.toThrow();
         }, 30000);
 
-        it("should return error for invalid proof format", async () => {
-            const result = await orchestrator.verifyRandomProof(null, null);
-            expect(result).toHaveProperty("isValid");
-            expect(result).toHaveProperty("error");
-            expect(result.isValid).toBe(false);
+        it("should throw error for null inputs", async () => {
+            await expect(
+                orchestrator.verifyRandomProof(null, null)
+            ).rejects.toThrow();
         }, 30000);
     });
 
     // ===== GENERATE RANDOM PROOF TESTS =====
     describe("generateRandomProof()", () => {
-        it("should handle missing artifacts gracefully", async () => {
+        it("should generate proof successfully", async () => {
             const inputs = {
                 blockHash: "12345",
                 userNonce: "67890",
@@ -319,9 +310,10 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             };
 
             const result = await orchestrator.generateRandomProof(inputs);
-            expect(result).toHaveProperty("success");
-            expect(typeof result.success).toBe("boolean");
-            expect(result.success).toBe(true);
+            expect(result).toHaveProperty("proof");
+            expect(result).toHaveProperty("publicSignals");
+            expect(result).toHaveProperty("R");
+            expect(result).toHaveProperty("circuitInputs");
         }, 60000);
 
         it("should accept setupOptions", async () => {
@@ -334,8 +326,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const options = { power: 12 };
 
             const result = await orchestrator.generateRandomProof(inputs, options);
-            expect(result).toHaveProperty("success");
-            expect(result.success).toBe(true);
+            expect(result).toHaveProperty("proof");
+            expect(result).toHaveProperty("publicSignals");
         }, 60000);
     });
 

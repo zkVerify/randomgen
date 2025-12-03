@@ -446,8 +446,8 @@ async function demo() {
   
   const result = await orchestrator.generateRandomProof(inputs);
   
-  console.log('Valid:', result.isValid);
-  console.log('Random value:', result.publicSignals[0]);
+  console.log('Random value:', result.R);
+  console.log('Public signals:', result.publicSignals);
   
   // Save proof data
   await orchestrator.saveProofData(result, './proofs');

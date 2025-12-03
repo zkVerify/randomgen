@@ -1,14 +1,17 @@
 pragma circom 2.0.0;
 
-include "../node_modules/circomlib/circuits/poseidon.circom";
-include "../node_modules/circomlib/circuits/comparators.circom";
+include "./circomlib/circuits/poseidon.circom";
+include "./circomlib/circuits/comparators.circom";
 
-template RandomCircuit(nBits) {
+template RandomCircuit() {
     // Public inputs
     signal input blockHash;
     signal input userNonce;
     signal input N;
-    assert(N > 0); // Ensure N is positive
+    // Ensure N is greater than 2^3 s.t. quotient and remainder can fit in 252 bits
+    // which is the maximum for Num2Bits_strict and LessThan templates for both
+    // bn128 and bls12-381 fields
+    assert(N > 8 && N < (2**252)); 
     
     // Private input
     signal input kurierEntropy;
@@ -27,21 +30,21 @@ template RandomCircuit(nBits) {
     signal output R <-- hash % N;
 
     // Ensure Quotient and Remainder fit in 'n' bits to prevent overflow attacks
-    component qCheck = Num2Bits(nBits);
+    component qCheck = Num2Bits_strict();
     qCheck.in <== quotient;
     
-    component rCheck = Num2Bits(nBits);
+    component rCheck = Num2Bits_strict();
     rCheck.in <== R;
 
     // Step 3: Verify the modulo decomposition
     hash === quotient * N + R;
 
     // Step 4: Ensure R is in the range [0, N)
-    component isLess = LessThan(nBits);
+    component isLess = LessThan(252);
     isLess.in[0] <== R;
     isLess.in[1] <== N;
     isLess.out === 1; // R < N
 }
 
-component main {public [blockHash, userNonce, N]} = RandomCircuit(252);
+component main {public [blockHash, userNonce, N]} = RandomCircuit();
 

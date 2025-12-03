@@ -58,15 +58,11 @@ async function main() {
     });
 
     log("Initializing (this may take 30-60 seconds on first run)...", "yellow");
-    const initialized = await orchestrator.initialize({
+    await orchestrator.initialize({
       circuitPath: path.join(__dirname, "../circuits/random.circom"),
       power: 12,
       ptauName: "pot12_final.ptau",
     });
-
-    if (!initialized) {
-      throw new Error("Failed to initialize orchestrator");
-    }
 
     log("✓ Orchestrator initialized successfully", "green");
 
@@ -93,7 +89,6 @@ async function main() {
 
     log("✓ Proof generated successfully", "green");
     log(`  Random value R: ${proofResult.R}`, "bright");
-    log(`  Valid: ${proofResult.success}`, "bright");
 
     // Display proof structure
     log("\nProof structure:", "blue");
@@ -142,7 +137,7 @@ async function main() {
     section("Step 5: Load and Re-verify Saved Proof");
 
     log("Loading proof from files...", "blue");
-    const loadedProof = await orchestrator.loadProofData(
+    const loaded = orchestrator.loadProofData(
       path.join(proofsDir, "proof.json"),
       path.join(proofsDir, "public.json")
     );
@@ -151,8 +146,8 @@ async function main() {
 
     log("Re-verifying loaded proof...", "blue");
     const isRevalidated = await orchestrator.verifyRandomProof(
-      loadedProof.proof,
-      loadedProof.publicSignals
+      loaded.proof,
+      loaded.publicSignals
     );
 
     if (isRevalidated) {

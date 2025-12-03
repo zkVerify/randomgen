@@ -256,8 +256,8 @@ async function exampleTampering() {
       result.publicSignals
     );
     log(
-      `Tampered proof verification: ${isValid1.isValid ? "VALID (unexpected!)" : "INVALID (correct!)"}`,
-      isValid1.isValid ? "red" : "green"
+      `Tampered proof verification: ${isValid1 ? "VALID (unexpected!)" : "INVALID (correct!)"}`,
+      isValid1 ? "red" : "green"
     );
 
     // Test 2: Tamper with public signals
@@ -269,8 +269,8 @@ async function exampleTampering() {
       tamperedSignals
     );
     log(
-      `Tampered signals verification: ${isValid2.isValid ? "VALID (unexpected!)" : "INVALID (correct!)"}`,
-      isValid2.isValid ? "red" : "green"
+      `Tampered signals verification: ${isValid2 ? "VALID (unexpected!)" : "INVALID (correct!)"}`,
+      isValid2 ? "red" : "green"
     );
 
     // Test 3: Verify original still works
@@ -280,8 +280,8 @@ async function exampleTampering() {
       originalSignals
     );
     log(
-      `Original proof verification: ${isValid3.isValid ? "VALID (correct!)" : "INVALID (unexpected!)"}`,
-      isValid3.isValid ? "green" : "red"
+      `Original proof verification: ${isValid3 ? "VALID (correct!)" : "INVALID (unexpected!)"}`,
+      isValid3 ? "green" : "red"
     );
   } catch (error) {
     log(`✗ Error: ${error.message}`, "red");

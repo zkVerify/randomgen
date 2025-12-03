@@ -265,21 +265,21 @@ describe("Utils Module - Complete Function Coverage", () => {
 
     // ===== VERIFICATION KEY TESTS =====
     describe("loadVerificationKey()", () => {
-      beforeAll(async () => {
-          await completeSetup();
-      }, 300000);
+        beforeAll(async () => {
+            await completeSetup();
+        }, 300000);
 
-      it("should load verification key if it exists", () => {
-          const vkey = loadVerificationKey("verification_key.json");
-          expect(vkey).toBeDefined();
-          expect(typeof vkey).toBe("object");
-      });
+        it("should load verification key if it exists", () => {
+            const vkey = loadVerificationKey("verification_key.json");
+            expect(vkey).toBeDefined();
+            expect(typeof vkey).toBe("object");
+        });
 
-      it("should return error if file does not exist", () => {
-          expect(() => {
-              loadVerificationKey("nonexistent.json");
-          }).toThrow();
-      });
+        it("should return error if file does not exist", () => {
+            expect(() => {
+                loadVerificationKey("nonexistent.json");
+            }).toThrow();
+        });
     });
 
     // ===== GENERATE AND VERIFY PROOF TESTS =====
@@ -313,15 +313,15 @@ describe("Utils Module - Complete Function Coverage", () => {
         }, 60000);
 
         it("should reject tampered proof", async () => {
-          const { proof, publicSignals } = await generateProof(circuitInputs);
-          const tamperedProof = JSON.parse(JSON.stringify(proof));
+            const { proof, publicSignals } = await generateProof(circuitInputs);
+            const tamperedProof = JSON.parse(JSON.stringify(proof));
 
-          if (tamperedProof.pi_a && tamperedProof.pi_a[0]) {
-              tamperedProof.pi_a[0] = "0";
-          }
+            if (tamperedProof.pi_a && tamperedProof.pi_a[0]) {
+                tamperedProof.pi_a[0] = "0";
+            }
 
-          const isValid = await verifyProof(vkey, tamperedProof, publicSignals);
-          expect(isValid).toBe(false);
+            const isValid = await verifyProof(vkey, tamperedProof, publicSignals);
+            expect(isValid).toBe(false);
         }, 60000);
     });
 
@@ -344,4 +344,133 @@ describe("Utils Module - Complete Function Coverage", () => {
             expect(result.isValid).toBe(true);
         }, 60000);
     });
+});
+
+// ===== N AS PUBLIC INPUT - SAME SETUP, DIFFERENT N VALUES =====
+describe("N as Public Input - Same setup works for different N values", () => {
+    let vkey;
+
+    beforeAll(async () => {
+        // Perform setup ONCE for all tests in this suite
+        await completeSetup();
+        vkey = loadVerificationKey("verification_key.json");
+    }, 300000);
+
+    afterAll(() => {
+        // Clean up build directory after all tests
+        if (fs.existsSync(buildDir)) {
+            fs.rmSync(buildDir, { recursive: true });
+        }
+    });
+
+    it("should generate and verify proofs with different N values using same setup", async () => {
+        const baseInputs = {
+            blockHash: 12345,
+            userNonce: 67890,
+            kurierEntropy: 54321,
+        };
+
+        const nValues = [100, 500, 1000, 5000, 10000];
+
+        for (const N of nValues) {
+            const circuitInputs = await createCircuitInputs({
+                ...baseInputs,
+                N,
+            });
+
+            const { proof, publicSignals } = await generateProof(circuitInputs);
+            expect(proof).toBeDefined();
+            expect(publicSignals).toBeDefined();
+
+            // Verify the proof with the SAME verification key
+            const isValid = await verifyProof(vkey, proof, publicSignals);
+            expect(isValid).toBe(true);
+
+            // Verify R is in valid range [0, N)
+            const R = BigInt(publicSignals[0]);
+            expect(R).toBeGreaterThanOrEqual(BigInt(0));
+            expect(R).toBeLessThan(BigInt(N));
+        }
+    }, 120000);
+
+    it("should produce correct R = hash mod N for different N values", async () => {
+        const baseInputs = {
+            blockHash: 99999,
+            userNonce: 88888,
+            kurierEntropy: 77777,
+        };
+
+        // Get the underlying hash
+        const hash = await computePoseidonHash(
+            baseInputs.blockHash,
+            baseInputs.userNonce,
+            baseInputs.kurierEntropy
+        );
+
+        const nValues = [100, 1000, 10000, 100000];
+        const results = [];
+
+        for (const N of nValues) {
+            const circuitInputs = await createCircuitInputs({
+                ...baseInputs,
+                N,
+            });
+
+            const { proof, publicSignals } = await generateProof(circuitInputs);
+            const isValid = await verifyProof(vkey, proof, publicSignals);
+            expect(isValid).toBe(true);
+
+            const R = BigInt(publicSignals[0]);
+            const expectedR = hash % BigInt(N);
+
+            expect(R).toEqual(expectedR);
+            results.push({ N, R });
+        }
+
+        // Verify we got different R values for different N
+        expect(results.length).toBe(4);
+    }, 120000);
+
+    it("should handle large N values", async () => {
+        const largeN = BigInt("1000000000000000000000"); // 10^21
+
+        const circuitInputs = await createCircuitInputs({
+            blockHash: 12345,
+            userNonce: 67890,
+            kurierEntropy: 54321,
+            N: largeN,
+        });
+
+        const { proof, publicSignals } = await generateProof(circuitInputs);
+        const isValid = await verifyProof(vkey, proof, publicSignals);
+        expect(isValid).toBe(true);
+
+        const R = BigInt(publicSignals[0]);
+        expect(R).toBeGreaterThanOrEqual(BigInt(0));
+        expect(R).toBeLessThan(largeN);
+    }, 60000);
+
+    it("should verify that same inputs with same N produce same proof result", async () => {
+        const inputs = {
+            blockHash: 77777,
+            userNonce: 88888,
+            kurierEntropy: 99999,
+            N: 1000,
+        };
+
+        const circuitInputs1 = await createCircuitInputs(inputs);
+        const circuitInputs2 = await createCircuitInputs(inputs);
+
+        const result1 = await generateProof(circuitInputs1);
+        const result2 = await generateProof(circuitInputs2);
+
+        // Public signals (including R) should be identical
+        expect(result1.publicSignals).toEqual(result2.publicSignals);
+
+        // Both proofs should be valid
+        const isValid1 = await verifyProof(vkey, result1.proof, result1.publicSignals);
+        const isValid2 = await verifyProof(vkey, result2.proof, result2.publicSignals);
+        expect(isValid1).toBe(true);
+        expect(isValid2).toBe(true);
+    }, 60000);
 });

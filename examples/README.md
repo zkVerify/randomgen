@@ -156,8 +156,8 @@ async function generateProof() {
     N: 1000,
   });
   
-  console.log("Proof generated:", result.isValid);
-  console.log("Random value:", result.publicSignals[0]);
+  console.log("Random value:", result.R);
+  console.log("Public signals:", result.publicSignals);
 }
 
 generateProof();
