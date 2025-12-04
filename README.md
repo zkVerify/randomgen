@@ -39,13 +39,13 @@ The library provides **15 pre-generated circuit variants**, each configured for 
 
 Circuit files can be regenerated using the included script:
 
-\`\`\`bash
+```bash
 # Generate all circuits (1-15)
 npm run generate-circuits:all
 
 # Generate specific circuits
 node scripts/generate-circuits.js 3 5 10
-\`\`\`
+```
 
 #### Choosing the Right Circuit
 
@@ -68,7 +68,7 @@ Before installing RandomGen, ensure you have:
 Install global dependencies:
 
 **Circom (v2+)** requires Rust and Cargo:
-\`\`\`bash
+```bash
 # Install Rust (if not already installed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
@@ -77,12 +77,12 @@ git clone https://github.com/iden3/circom.git
 cd circom
 cargo build --release
 cargo install --path circom
-\`\`\`
+```
 
 **snarkjs**:
-\`\`\`bash
+```bash
 npm install -g snarkjs@^0.7
-\`\`\`
+```
 
 ### Recommended: Use Pre-Prepared Powers of Tau Files
 
@@ -100,35 +100,35 @@ For production use, it's **strongly recommended** to use pre-prepared Phase 2 Po
 
 **Example usage with pre-prepared files:**
 
-\`\`\`bash
+```bash
 # Download a prepared ptau file (e.g., power 15 for production)
 curl -O https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_15.ptau
 
 # Rename to match expected format
 mv powersOfTau28_hez_final_15.ptau pot15_final.ptau
-\`\`\`
+```
 
 > 💡 **Why use prepared files?** The security of Groth16 proofs depends on the "toxic waste" from the Powers of Tau ceremony being destroyed. Pre-prepared files from multi-party ceremonies ensure that as long as at least one participant was honest, the ceremony is secure.
 
 ### Install RandomGen
 
-\`\`\`bash
+```bash
 npm install randomgen
-\`\`\`
+```
 
 Or for local development:
 
-\`\`\`bash
+```bash
 git clone <repository-url>
 cd randomgen
 npm install
-\`\`\`
+```
 
 ## Quick Start
 
 ### Basic Usage with Orchestrator (Recommended)
 
-\`\`\`javascript
+```javascript
 const { RandomCircuitOrchestrator } = require('randomgen');
 
 async function generateRandomProof() {
@@ -170,11 +170,11 @@ async function generateRandomProof() {
 }
 
 generateRandomProof().catch(console.error);
-\`\`\`
+```
 
 ### Using Low-Level Utils
 
-\`\`\`javascript
+```javascript
 const { utils } = require('randomgen');
 
 async function lowLevelExample() {
@@ -200,13 +200,13 @@ async function lowLevelExample() {
 }
 
 lowLevelExample().catch(console.error);
-\`\`\`
+```
 
 ### Setup and Compilation
 
 For custom circuits or regenerating artifacts:
 
-\`\`\`javascript
+```javascript
 const { setup } = require('randomgen');
 
 async function setupCircuit() {
@@ -248,7 +248,7 @@ async function manualSetup() {
 
   console.log('Setup complete!');
 }
-\`\`\`
+```
 
 ## API Reference
 
@@ -258,9 +258,9 @@ High-level orchestrator for managing the complete ZK proof workflow.
 
 #### Constructor
 
-\`\`\`javascript
+```javascript
 new RandomCircuitOrchestrator(options)
-\`\`\`
+```
 
 | Option         | Type   | Default                   | Description                                 |
 | -------------- | ------ | ------------------------- | ------------------------------------------- |
@@ -282,24 +282,24 @@ new RandomCircuitOrchestrator(options)
 Initializes the orchestrator and generates artifacts if needed.
 Only regenerates missing artifacts (smart caching).
 
-\`\`\`javascript
+```javascript
 await orchestrator.initialize();
-\`\`\`
+```
 
 ##### `validateBuildArtifacts()`
 
 Checks if all required build artifacts exist (R1CS, WASM, zkey, verification key).
 
-\`\`\`javascript
+```javascript
 const validation = orchestrator.validateBuildArtifacts();
 // { isValid: boolean, missingFiles: string[] }
-\`\`\`
+```
 
 ##### `generateRandomProof(inputs)`
 
 Generates a complete ZK proof with verification.
 
-\`\`\`javascript
+```javascript
 const result = await orchestrator.generateRandomProof({
   blockHash: 12345n,
   userNonce: 7,
@@ -307,36 +307,36 @@ const result = await orchestrator.generateRandomProof({
   N: 1000,
 });
 // Returns: { proof, publicSignals, R (array of strings), circuitInputs }
-\`\`\`
+```
 
 ##### `verifyRandomProof(proof, publicSignals)`
 
 Verifies a generated proof.
 
-\`\`\`javascript
+```javascript
 const isValid = await orchestrator.verifyRandomProof(proof, publicSignals);
 // Returns: boolean
-\`\`\`
+```
 
 ##### `saveProofData(proofData, outputDir)`
 
 Saves proof data to JSON files. `outputDir` is required.
 
-\`\`\`javascript
+```javascript
 const files = await orchestrator.saveProofData(proofData, 'proofs/');
 // Returns: { proof: string, publicSignals: string, R: string }
-\`\`\`
+```
 
 ##### `loadProofData(proofFile, publicSignalsFile)`
 
 Loads proof data from JSON files. Both parameters are required.
 
-\`\`\`javascript
+```javascript
 const { proof, publicSignals } = orchestrator.loadProofData(
   'proofs/proof.json',
   'proofs/public.json'
 );
-\`\`\`
+```
 
 ### Standalone Functions
 
@@ -345,7 +345,7 @@ const { proof, publicSignals } = orchestrator.loadProofData(
 Computes the local Poseidon hash and random values without generating a proof.
 Useful for testing and verification. **Both parameters are required.**
 
-\`\`\`javascript
+```javascript
 const { computeLocalHash } = require('randomgen');
 const { hashes, R } = await computeLocalHash(
   { blockHash: 100, userNonce: 200, kurierEntropy: 300, N: 1000 },
@@ -353,7 +353,7 @@ const { hashes, R } = await computeLocalHash(
 );
 // hashes: array of Poseidon hash output strings
 // R: array of (hash mod N) value strings
-\`\`\`
+```
 
 ### Utils Functions
 
@@ -364,31 +364,31 @@ Core cryptographic and utility functions. **All parameters are required** - no d
 Computes Poseidon hash of three inputs, returning an array of BigInt outputs.
 For `nOuts > 4`, dummy zero inputs are automatically added to match circuit behavior.
 
-\`\`\`javascript
+```javascript
 const hashes = await utils.computePoseidonHash(1, 2, 3, 5);
 // Returns: BigInt[] - array of 5 hash values
-\`\`\`
+```
 
 #### `generateRandomFromSeed(seeds, N)`
 
 Generates random numbers from seed(s) using modulo operation.
 Accepts a single seed or an array of seeds.
 
-\`\`\`javascript
+```javascript
 // Single seed
 const [random] = utils.generateRandomFromSeed(12345n, 1000n);
 
 // Multiple seeds (from computePoseidonHash output)
 const randoms = utils.generateRandomFromSeed([seed1, seed2, seed3], 1000n);
 // Returns: BigInt[] - array of values in [0, N)
-\`\`\`
+```
 
 #### `createCircuitInputs(inputs)`
 
 Creates properly formatted inputs for the circuit.
 All fields are required: `blockHash`, `userNonce`, `kurierEntropy`, `N`.
 
-\`\`\`javascript
+```javascript
 const circuitInputs = utils.createCircuitInputs({
   blockHash: 100,
   userNonce: 200,
@@ -396,51 +396,51 @@ const circuitInputs = utils.createCircuitInputs({
   N: 1000,
 });
 // Returns: { blockHash, userNonce, kurierEntropy, N } as strings
-\`\`\`
+```
 
 #### `generateProof(inputs, circuitName)`
 
 Generates a Groth16 proof. Both parameters are required.
 
-\`\`\`javascript
+```javascript
 const { proof, publicSignals } = await utils.generateProof(inputs, "random_15");
-\`\`\`
+```
 
 #### `verifyProof(vkey, proof, publicSignals)`
 
 Verifies a proof against the verification key.
 
-\`\`\`javascript
+```javascript
 const isValid = await utils.verifyProof(vkey, proof, publicSignals);
 // Returns: boolean
-\`\`\`
+```
 
 #### `loadVerificationKey(filename)`
 
 Loads verification key from build directory. Filename is required.
 
-\`\`\`javascript
+```javascript
 const vkey = utils.loadVerificationKey('verification_key.json');
-\`\`\`
+```
 
 #### `getWasmPath(circuitName)` / `getFinalZkeyPath(circuitName)`
 
 Get paths to circuit artifacts. `circuitName` is required.
 
-\`\`\`javascript
+```javascript
 const wasmPath = utils.getWasmPath('random');
 const zkeyPath = utils.getFinalZkeyPath('random');
-\`\`\`
+```
 
 #### `fullWorkflow(inputs, circuitName)`
 
 Executes complete workflow: create inputs → generate proof → verify.
 Both parameters are required.
 
-\`\`\`javascript
+```javascript
 const result = await utils.fullWorkflow(inputs, "random_15");
 // Returns: { inputs, proof, publicSignals, isValid }
-\`\`\`
+```
 
 ### Setup Functions
 
@@ -450,7 +450,7 @@ Circuit compilation and artifact generation functions. **All parameters are requ
 
 Orchestrates complete setup workflow with smart caching (only regenerates missing artifacts).
 
-\`\`\`javascript
+```javascript
 await setup.completeSetup('random', {
   circuitPath: 'circuits/random_15.circom',  // Required
   power: 15,                               // Required
@@ -458,54 +458,54 @@ await setup.completeSetup('random', {
   ptauEntropy: 'my-ptau-entropy',         // Required
   setupEntropy: 'my-setup-entropy',       // Required
 });
-\`\`\`
+```
 
 #### `compileCircuit(circuitName, circuitPath)`
 
 Compiles Circom circuit to R1CS and WASM. Both parameters are required.
 
-\`\`\`javascript
+```javascript
 const { r1csPath, wasmPath } = await setup.compileCircuit(
   'random',
   'circuits/random_15.circom'
 );
-\`\`\`
+```
 
 #### `ensurePtauFile(power, ptauName, entropy)`
 
 Creates or verifies Powers of Tau file. All parameters are required.
 
-\`\`\`javascript
+```javascript
 await setup.ensurePtauFile(15, 'pot15_final.ptau', 'my-entropy');
-\`\`\`
+```
 
 #### `setupGroth16(r1csPath, ptauPath, zkeyPath, entropy)`
 
 Generates Groth16 proving key (zkey) with contribution. All parameters are required.
 
-\`\`\`javascript
+```javascript
 await setup.setupGroth16(
   'build/random.r1cs',
   'pot15_final.ptau',
   'build/random_final.zkey',
   'my-entropy'
 );
-\`\`\`
+```
 
 #### `exportVerificationKey(zkeyPath, vkeyPath)`
 
 Extracts verification key from zkey file.
 
-\`\`\`javascript
+```javascript
 await setup.exportVerificationKey(
   'build/random_final.zkey',
   'build/verification_key.json'
 );
-\`\`\`
+```
 
 ## Project Structure
 
-\`\`\`
+```
 randomgen/
 ├── index.js                 # Main entry point (library exports)
 ├── package.json             # Project metadata and dependencies
@@ -538,21 +538,21 @@ randomgen/
     ├── setup_groth16.sh     # Generate setup artifacts
     ├── prove.sh             # Generate proof
     └── verify.sh            # Verify proof
-\`\`\`
+```
 
 ## Testing
 
 Run the test suite:
 
-\`\`\`bash
+```bash
 npm test
-\`\`\`
+```
 
 Run tests in watch mode:
 
-\`\`\`bash
+```bash
 npm run test:watch
-\`\`\`
+```
 
 Test coverage includes:
 - Unit tests for all utility functions
@@ -570,7 +570,7 @@ Test coverage includes:
 Generate provably fair random numbers for selecting winners from a pool of participants.
 The proof guarantees the randomness is deterministic and cannot be manipulated.
 
-\`\`\`javascript
+```javascript
 const { RandomCircuitOrchestrator, computeLocalHash } = require('randomgen');
 
 async function selectLotteryWinners() {
@@ -631,13 +631,13 @@ async function selectLotteryWinners() {
 }
 
 selectLotteryWinners().catch(console.error);
-\`\`\`
+```
 
 ### 2. Gaming: Provably Fair Card Shuffle
 
 Generate a verifiable shuffle for card games where players need to trust the randomness.
 
-\`\`\`javascript
+```javascript
 const { RandomCircuitOrchestrator } = require('randomgen');
 
 async function shuffleDeck() {
@@ -690,14 +690,14 @@ async function shuffleDeck() {
 }
 
 shuffleDeck().catch(console.error);
-\`\`\`
+```
 
 ### 3. Offline Verification (No Proof Generation)
 
 Verify expected outputs locally without the overhead of proof generation.
 Useful for testing, debugging, or pre-computing expected results.
 
-\`\`\`javascript
+```javascript
 const { computeLocalHash, RandomCircuitOrchestrator } = require('randomgen');
 
 async function offlineVerification() {
@@ -744,13 +744,13 @@ async function offlineVerification() {
 }
 
 offlineVerification().catch(console.error);
-\`\`\`
+```
 
 ### 4. Low-Level API: Custom Circuit Integration
 
 For advanced users who need fine-grained control over the proof workflow.
 
-\`\`\`javascript
+```javascript
 const { utils, setup } = require('randomgen');
 const path = require('path');
 
@@ -814,13 +814,13 @@ async function customCircuitWorkflow() {
 }
 
 customCircuitWorkflow().catch(console.error);
-\`\`\`
+```
 
 ### 5. Batch Processing: Multiple Proofs
 
 Generate multiple independent proofs efficiently by reusing the initialized orchestrator.
 
-\`\`\`javascript
+```javascript
 const { RandomCircuitOrchestrator } = require('randomgen');
 
 async function batchProofGeneration() {
@@ -883,39 +883,39 @@ async function batchProofGeneration() {
 }
 
 batchProofGeneration().catch(console.error);
-\`\`\`
+```
 
 ## Troubleshooting
 
 ### "circom: command not found"
 Install Circom from source (requires Rust and Cargo):
-\`\`\`bash
+```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 git clone https://github.com/iden3/circom.git
 cd circom
 cargo build --release
 cargo install --path circom
-\`\`\`
+```
 
 ### "snarkjs: command not found"
 Install snarkjs globally:
-\`\`\`bash
+```bash
 npm install -g snarkjs@^0.7
-\`\`\`
+```
 
 ### "Cannot find module 'randomgen'"
 Ensure the package is installed:
-\`\`\`bash
+```bash
 npm install randomgen
-\`\`\`
+```
 
 ### Build artifacts missing
 Artifacts are generated automatically on first use via `initialize()`.
 Only missing artifacts are regenerated (smart caching).
 
-\`\`\`javascript
+```javascript
 await orchestrator.initialize();
-\`\`\`
+```
 
 ### Verification fails
 Ensure:
