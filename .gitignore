@@ -1,7 +1,5 @@
 node_modules/
 build/
-pot12_0000.ptau
-pot12_final.ptau
 *.zkey
 *.wtns
 *.r1cs
@@ -9,3 +7,4 @@ pot12_final.ptau
 kurier/.env
 kurier/node_modules/
 kurier/circom-vkey.json
+examples/proofs/

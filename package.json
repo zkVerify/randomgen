@@ -1,15 +1,43 @@
 {
   "name": "randomgen",
   "version": "1.0.0",
+  "description": "Zero-knowledge random number generator using Circom and Groth16 proofs",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
+  "keywords": [
+    "zero-knowledge",
+    "zk-proof",
+    "random-number-generator",
+    "circom",
+    "groth16",
+    "snarkjs",
+    "cryptography"
+  ],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "scripts": {
+    "test": "jest --forceExit --detectOpenHandles",
+    "test:watch": "jest --watch",
+    "generate-circuits": "node scripts/generate-circuits.js",
+    "generate-circuits:all": "node scripts/generate-circuits.js"
+  },
+  "files": [
+    "index.js",
+    "lib/",
+    "circuits/",
+    "build/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "circom_tester": "^0.0.20",
+    "jest": "^29.5.0"
+  },
   "dependencies": {
-    "circomlib": "^2.0.5"
+    "circomlib": "^2.0.5",
+    "circomlibjs": "^0.1.7",
+    "snarkjs": "^0.7.0"
   }
 }
