@@ -3,9 +3,12 @@
  * 
  * This example demonstrates the complete workflow for RandomGen:
  * 1. Initialize the orchestrator (generates artifacts if needed)
- * 2. Generate a zero-knowledge proof
+ * 2. Generate a zero-knowledge proof with multiple random outputs
  * 3. Verify the proof
  * 4. Save and load proof data
+ * 
+ * The production circuit (random.circom) generates 15 random outputs per proof.
+ * Each output R[i] is computed as: PoseidonEx(...)[i] mod N
  * 
  * Usage:
  *   node examples/e2e-example.js
@@ -43,6 +46,8 @@ function section(title) {
   console.log();
 }
 
+const NUM_OUTPUTS = 15; // Number of random outputs to generate (must match circuit)
+
 async function main() {
   try {
     section("RandomGen End-to-End Example");
@@ -53,16 +58,19 @@ async function main() {
     section("Step 1: Initialize Orchestrator");
 
     log("Creating orchestrator instance...", "blue");
+    // All configuration is set in the constructor
     const orchestrator = new RandomCircuitOrchestrator({
       circuitName: "random",
+      circuitPath: path.join(__dirname, "../circuits/random.circom"),
+      numOutputs: NUM_OUTPUTS,
+      power: 15,
+      // https://github.com/privacy-ethereum/perpetualpowersoftau
+      ptauName: "ppot_0080_15.ptau",
+      setupEntropy: "e2e-example-setup-entropy",
     });
 
     log("Initializing (this may take 30-60 seconds on first run)...", "yellow");
-    await orchestrator.initialize({
-      circuitPath: path.join(__dirname, "../circuits/random.circom"),
-      power: 12,
-      ptauName: "pot12_final.ptau",
-    });
+    await orchestrator.initialize();
 
     log("✓ Orchestrator initialized successfully", "green");
 
@@ -85,10 +93,14 @@ async function main() {
     log(`  N (modulus):   ${inputs.N}`, "dim");
 
     log("\nGenerating proof (this may take 1-2 seconds)...", "yellow");
+    // numOutputs is already configured in constructor
     const proofResult = await orchestrator.generateRandomProof(inputs);
 
     log("✓ Proof generated successfully", "green");
-    log(`  Random value R: ${proofResult.R}`, "bright");
+    log(`  Random values R:`, "bright");
+    proofResult.R.forEach((r, i) => {
+      log(`    R[${i}]: ${r}`, "bright");
+    });
 
     // Display proof structure
     log("\nProof structure:", "blue");
@@ -162,12 +174,15 @@ async function main() {
     section("Step 6: Local Hash Computation");
 
     log("Computing local hash (Poseidon + modulo)...", "blue");
-    const { hash, R } = await computeLocalHash(inputs);
+    const { hashes, R } = await computeLocalHash(inputs, NUM_OUTPUTS);
 
     log("✓ Hash computation complete", "green");
-    log(`  Poseidon hash: ${hash}`, "dim");
-    log(`  Result (R):    ${R}`, "dim");
-    log(`  Matches proof output: ${R === proofResult.R}`, "dim");
+    log(`  Poseidon hashes: [${hashes.slice(0, 3).join(", ")}, ...]`, "dim");
+    log(`  Results (R):`, "dim");
+    R.forEach((r, i) => {
+      log(`    R[${i}]: ${r}`, "dim");
+    });
+    log(`  Matches proof output: ${JSON.stringify(R) === JSON.stringify(proofResult.R)}`, "dim");
 
     // ========================================================================
     // STEP 7: Batch Proof Generation
@@ -188,17 +203,10 @@ async function main() {
 
       const proof = await orchestrator.generateRandomProof(batchInputs);
       batchProofs.push(proof);
-      log(`  [${i + 1}/${batchSize}] Generated proof with R = ${proof.publicSignals[0]}`, "dim");
+      log(`  [${i + 1}/${batchSize}] Generated proof with R = [${proof.R.join(", ")}]`, "dim");
     }
 
     log(`✓ Generated ${batchSize} proofs`, "green");
-
-    // Summary statistics
-    let validCount = 0;
-    batchProofs.forEach((proof) => {
-      if (proof.isValid) validCount++;
-    });
-    log(`  Valid proofs: ${validCount}/${batchSize}`, "dim");
 
     // ========================================================================
     // FINAL SUMMARY

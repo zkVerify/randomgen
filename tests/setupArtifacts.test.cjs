@@ -13,14 +13,40 @@ const rootDir = path.resolve(__dirname, "..");
 const buildDir = path.join(rootDir, "build");
 const circuitDir = path.join(rootDir, "circuits");
 
-describe("SetupArtifacts Module - Complete Function Coverage", () => {
-    afterEach(() => {
-        // Clean up build directory after all tests
-        if (fs.existsSync(buildDir)) {
-            fs.rmSync(buildDir, { recursive: true });
-        }
-    });
+/**
+ * Cleans up build directory
+ */
+function cleanupBuildDir() {
+    if (fs.existsSync(buildDir)) {
+        fs.rmSync(buildDir, { recursive: true });
+    }
+}
 
+/**
+ * Cleans up generated ptau files for a given power
+ * @param {number} power - The power value to match in ptau filenames
+ */
+function cleanupPtauFiles(power) {
+    const ptauPattern = new RegExp(`^pot${power}.*\\.ptau$`);
+    const files = fs.readdirSync(rootDir);
+    for (const file of files) {
+        if (ptauPattern.test(file)) {
+            const filePath = path.join(rootDir, file);
+            fs.unlinkSync(filePath);
+        }
+    }
+}
+
+/**
+ * Cleans up all test artifacts: build directory and ptau files
+ * @param {number} power - The power value to match in ptau filenames
+ */
+function cleanupTestArtifacts(power) {
+    cleanupBuildDir();
+    cleanupPtauFiles(power);
+}
+
+describe("SetupArtifacts Module - Complete Function Coverage", () => {
     // ===== ENSURE BUILD DIR TESTS =====
     describe("ensureBuildDir()", () => {
         it("should create build directory if it does not exist", () => {
@@ -56,180 +82,224 @@ describe("SetupArtifacts Module - Complete Function Coverage", () => {
 
     // ===== COMPILE CIRCUIT TESTS =====
     describe("compileCircuit()", () => {
-        it("should compile circuit with default name", async () => {
-            const circuitPath = path.join(circuitDir, "random.circom");
+        it("should throw if circuitName not provided", async () => {
+            await expect(compileCircuit()).rejects.toThrow("circuitName is required");
+        });
 
-            const result = await compileCircuit("random", circuitPath);
+        it("should throw if circuitPath not provided", async () => {
+            await expect(compileCircuit("random_test")).rejects.toThrow("circuitPath is required");
+        });
+
+        it("should compile circuit with explicit parameters", async () => {
+            const circuitPath = path.join(circuitDir, "random_test.circom");
+
+            const result = await compileCircuit("random_test", circuitPath);
             expect(result.r1csPath).toBeDefined();
             expect(result.wasmPath).toBeDefined();
             expect(typeof result.r1csPath).toBe("string");
             expect(typeof result.wasmPath).toBe("string");
             expect(fs.existsSync(result.r1csPath)).toBe(true);
             expect(fs.existsSync(result.wasmPath)).toBe(true);
-        }, 120000);
 
-        it("should throw error if circuit file not found", async () => {
-            await expect(
-                compileCircuit("nonexistent", "/nonexistent/path.circom")
-            ).rejects.toThrow();
+            // Cleanup
+            cleanupBuildDir();
         });
+    }, 120000);
 
-        it("should use default circuit path if not provided", async () => {
-            const result = await compileCircuit("random");
-            expect(result.r1csPath).toBeDefined();
-            expect(result.wasmPath).toBeDefined();
-            expect(typeof result.r1csPath).toBe("string");
-            expect(typeof result.wasmPath).toBe("string");
-            expect(fs.existsSync(result.r1csPath)).toBe(true);
-            expect(fs.existsSync(result.wasmPath)).toBe(true);
-        }, 120000);
+    it("should throw error if circuit file not found", async () => {
+        await expect(
+            compileCircuit("nonexistent", "/nonexistent/path.circom")
+        ).rejects.toThrow();
+    });
+});
+
+// ===== ENSURE PTAU FILE TESTS =====
+describe("ensurePtauFile()", () => {
+    const TEST_POWER = 5;
+    const TEST_ENTROPY = "0x1234";
+
+    afterEach(() => {
+        cleanupPtauFiles(TEST_POWER);
     });
 
-    // ===== ENSURE PTAU FILE TESTS =====
-    describe("ensurePtauFile()", () => {
-        it("should return path to ptau file if it exists", async () => {
-            const ptauPath = await ensurePtauFile(12, "pot12_final.ptau");
-            expect(typeof ptauPath).toBe("string");
-            expect(ptauPath).toContain("pot12_final.ptau");
-            expect(fs.existsSync(ptauPath)).toBe(true);
-        }, 120000);
-
-        it("should use default power of 12", async () => {
-            const ptauPath = await ensurePtauFile();
-            expect(ptauPath).toContain("pot12_final.ptau");
-            expect(fs.existsSync(ptauPath)).toBe(true);
-        }, 120000);
-
-        it("should use custom power value", async () => {
-            const ptauPath = await ensurePtauFile(11, "pot11_final.ptau");
-            expect(ptauPath).toContain("pot11_final.ptau");
-            expect(fs.existsSync(ptauPath)).toBe(true);
-        }, 120000);
-
-        it("should create ptau file in root directory", async () => {
-            const ptauPath = await ensurePtauFile();
-            expect(ptauPath).toContain(rootDir);
-            expect(fs.existsSync(ptauPath)).toBe(true);
-        }, 120000);
-
-        it("should return absolute path", async () => {
-            const ptauPath = await ensurePtauFile();
-            expect(path.isAbsolute(ptauPath)).toBe(true);
-            expect(fs.existsSync(ptauPath)).toBe(true);
-        }, 120000);
+    it("should throw if power not provided", async () => {
+        await expect(ensurePtauFile()).rejects.toThrow("power is required");
     });
 
-    // ===== SETUP GROTH16 TESTS =====
-    describe("setupGroth16()", () => {
-        beforeEach(async () => {
-            await completeSetup();
-        });
-
-        it("should throw error if R1CS file not found", async () => {
-            await expect(
-                setupGroth16("/nonexistent/random.r1cs", "pot12_final.ptau", "random_final.zkey")
-            ).rejects.toThrow("R1CS file not found");
-        });
-
-        it("should throw error if PTAU file not found", async () => {
-            const r1csPath = path.join(buildDir, "random.r1cs");
-            await expect(
-                setupGroth16(r1csPath, "/nonexistent/pot12_final.ptau", "random_final.zkey")
-            ).rejects.toThrow("PTAU file not found");
-        });
-
-        it("should generate zkey file if both inputs exist", async () => {
-            const r1csPath = path.join(buildDir, "random.r1cs");
-            const ptauPath = path.join(rootDir, "pot12_final.ptau");
-            const zkeyPath = path.join(buildDir, "random_final.zkey");
-
-            const result = await setupGroth16(r1csPath, ptauPath, zkeyPath);
-            expect(result).toBe(zkeyPath);
-            expect(result).toContain("random_final.zkey");
-            expect(fs.existsSync(result)).toBe(true);
-        }, 120000);
+    it("should throw if ptauName not provided", async () => {
+        await expect(ensurePtauFile(TEST_POWER)).rejects.toThrow("ptauName is required");
     });
+
+    it("should throw if entropy not provided", async () => {
+        await expect(ensurePtauFile(TEST_POWER, `pot${TEST_POWER}_final.ptau`)).rejects.toThrow("entropy is required");
+    });
+
+    it("should return path to ptau file", async () => {
+        const ptauPath = await ensurePtauFile(TEST_POWER, `pot${TEST_POWER}_final.ptau`, TEST_ENTROPY);
+        expect(typeof ptauPath).toBe("string");
+        expect(ptauPath).toContain(`pot${TEST_POWER}_final.ptau`);
+        expect(fs.existsSync(ptauPath)).toBe(true);
+    }, 120000);
+
+    it("should create ptau file in root directory", async () => {
+        const ptauPath = await ensurePtauFile(TEST_POWER, `pot${TEST_POWER}_final.ptau`, TEST_ENTROPY);
+        expect(ptauPath).toContain(rootDir);
+        expect(fs.existsSync(ptauPath)).toBe(true);
+    }, 120000);
+
+    it("should return absolute path", async () => {
+        const ptauPath = await ensurePtauFile(TEST_POWER, `pot${TEST_POWER}_final.ptau`, TEST_ENTROPY);
+        expect(path.isAbsolute(ptauPath)).toBe(true);
+        expect(fs.existsSync(ptauPath)).toBe(true);
+    }, 120000);
+});
+
+const TEST_PTAU_ENTROPY = "0x1234";
+const TEST_SETUP_ENTROPY = "0xabcd";
+
+// ===== SETUP GROTH16 TESTS =====
+describe("setupGroth16()", () => {
+    const TEST_CIRCUIT_NAME = "random_test";
+    const TEST_POWER = 13;
+
+    beforeAll(async () => {
+        await completeSetup(TEST_CIRCUIT_NAME, {
+            circuitPath: path.join(rootDir, "circuits", `${TEST_CIRCUIT_NAME}.circom`),
+            power: TEST_POWER,
+            ptauName: `pot${TEST_POWER}_final.ptau`,
+            ptauEntropy: TEST_PTAU_ENTROPY,
+            setupEntropy: TEST_SETUP_ENTROPY,
+        });
+    });
+
+    afterAll(() => {
+        cleanupTestArtifacts(TEST_POWER);
+    });
+
+    it("should throw error if R1CS file not found", async () => {
+        await expect(
+            setupGroth16(`/nonexistent/${TEST_CIRCUIT_NAME}.r1cs`, `pot${TEST_POWER}_final.ptau`, `${TEST_CIRCUIT_NAME}_final.zkey`, TEST_SETUP_ENTROPY)
+        ).rejects.toThrow("R1CS file not found");
+    });
+
+    it("should throw error if PTAU file not found", async () => {
+        const r1csPath = path.join(buildDir, `${TEST_CIRCUIT_NAME}.r1cs`);
+        await expect(
+            setupGroth16(r1csPath, `/nonexistent/pot${TEST_POWER}_final.ptau`, `${TEST_CIRCUIT_NAME}_final.zkey`, TEST_SETUP_ENTROPY)
+        ).rejects.toThrow("PTAU file not found");
+    });
+
+    it("should generate zkey file if both inputs exist", async () => {
+        const r1csPath = path.join(buildDir, `${TEST_CIRCUIT_NAME}.r1cs`);
+        const ptauPath = path.join(rootDir, `pot${TEST_POWER}_final.ptau`);
+        const zkeyPath = path.join(buildDir, `${TEST_CIRCUIT_NAME}_final.zkey`);
+
+        const result = await setupGroth16(r1csPath, ptauPath, zkeyPath, TEST_SETUP_ENTROPY);
+        expect(result).toBe(zkeyPath);
+        expect(result).toContain(`${TEST_CIRCUIT_NAME}_final.zkey`);
+        expect(fs.existsSync(result)).toBe(true);
+    }, 120000);
+
 
     // ===== EXPORT VERIFICATION KEY TESTS =====
-    describe("exportVerificationKey()", () => {
-        it("should throw error if zkey file not found", async () => {
-            await expect(
-                exportVerificationKey("/nonexistent/random_final.zkey", "verification_key.json")
-            ).rejects.toThrow();
-        });
-
-        it("should export verification key if zkey exists", async () => {
-            await completeSetup();
-            const zkeyPath = path.join(buildDir, "random_final.zkey");
-            const vkeyPath = path.join(buildDir, "test_vkey.json");
-
-            // Vkey exported correctly
-            const vkey = await exportVerificationKey(zkeyPath, vkeyPath);
-            expect(vkey).toBeDefined();
-            expect(typeof vkey).toBe("object");
-            expect(vkey.protocol).toBeDefined();
-            expect(fs.existsSync(vkeyPath)).toBe(true);
-
-            // Vkey deserialized matches original
-            const data = fs.readFileSync(vkeyPath, "utf-8");
-            const vkey_read = JSON.parse(data);
-            expect(vkey).toBeDefined();
-            expect(vkey_read).toEqual(vkey)
-        }, 120000);
+    it("should throw error if zkey file not found", async () => {
+        await expect(
+            exportVerificationKey(`/nonexistent/${TEST_CIRCUIT_NAME}_final.zkey`, "verification_key.json")
+        ).rejects.toThrow();
     });
 
-    // ===== COMPLETE SETUP TESTS =====
-    describe("completeSetup()", () => {
-        it("should execute complete setup workflow", async () => {
-            const result = await completeSetup("random", {
-                circuitPath: path.join(circuitDir, "random.circom"),
-                power: 12,
-            });
-            expect(result).toBeDefined();
-            expect(result.r1csPath).toBeDefined();
-            expect(fs.existsSync(result.r1csPath)).toBe(true);
-            expect(result.wasmPath).toBeDefined();
-            expect(fs.existsSync(result.wasmPath)).toBe(true);
-            expect(result.ptauPath).toBeDefined();
-            expect(fs.existsSync(result.ptauPath)).toBe(true);
-            expect(result.zkeyPath).toBeDefined();
-            expect(fs.existsSync(result.zkeyPath)).toBe(true);
-            expect(result.vkeyPath).toBeDefined();
-            expect(fs.existsSync(result.vkeyPath)).toBe(true);
+    it("should export verification key if zkey exists", async () => {
+        const zkeyPath = path.join(buildDir, `${TEST_CIRCUIT_NAME}_final.zkey`);
+        const vkeyPath = path.join(buildDir, "test_vkey.json");
 
-        }, 300000);
+        // Vkey exported correctly
+        const vkey = await exportVerificationKey(zkeyPath, vkeyPath);
+        expect(vkey).toBeDefined();
+        expect(typeof vkey).toBe("object");
+        expect(vkey.protocol).toBeDefined();
+        expect(fs.existsSync(vkeyPath)).toBe(true);
 
-        it("should accept custom power value", async () => {
-            const result = await completeSetup("random", {
-                power: 11,
-                ptauName: "pot11_final.ptau",
-            });
+        // Vkey deserialized matches original
+        const data = fs.readFileSync(vkeyPath, "utf-8");
+        const vkey_read = JSON.parse(data);
+        expect(vkey).toBeDefined();
+        expect(vkey_read).toEqual(vkey)
+    }, 120000);
+});
 
-            expect(result.ptauPath).toContain("pot11");
-        }, 300000);
+// ===== COMPLETE SETUP TESTS =====
+describe("completeSetup()", () => {
+    it("should throw if circuitName not provided", async () => {
+        await expect(completeSetup()).rejects.toThrow("circuitName is required");
+    });
 
-        it("should use default options if not provided", async () => {
-            const result = await completeSetup("random");
-            expect(result).toBeDefined();
-            expect(result.r1csPath).toBeDefined();
-            expect(fs.existsSync(result.r1csPath)).toBe(true);
-            expect(result.wasmPath).toBeDefined();
-            expect(fs.existsSync(result.wasmPath)).toBe(true);
-            expect(result.ptauPath).toBeDefined();
-            expect(fs.existsSync(result.ptauPath)).toBe(true);
-            expect(result.zkeyPath).toBeDefined();
-            expect(fs.existsSync(result.zkeyPath)).toBe(true);
-            expect(result.vkeyPath).toBeDefined();
-            expect(fs.existsSync(result.vkeyPath)).toBe(true);
-        }, 300000);
+    it("should throw if options not provided", async () => {
+        await expect(completeSetup("random_test")).rejects.toThrow("options object is required");
+    });
 
-        it("should generate artifacts in build directory", async () => {
-            const result = await completeSetup("random");
-            expect(result.r1csPath).toContain("build");
-            expect(result.wasmPath).toContain("build");
-            expect(result.zkeyPath).toContain("build");
-            expect(result.vkeyPath).toContain("build");
+    it("should throw if circuitPath not provided", async () => {
+        await expect(completeSetup("random_test", { power: 13, ptauName: "pot13_final.ptau" })).rejects.toThrow("options.circuitPath is required");
+    });
 
-        }, 300000);
+    it("should throw if power not provided", async () => {
+        await expect(completeSetup("random_test", {
+            circuitPath: path.join(circuitDir, "random_test.circom"),
+            ptauName: "pot13_final.ptau",
+        })).rejects.toThrow("options.power is required");
+    });
+
+    it("should throw if ptauName not provided", async () => {
+        await expect(completeSetup("random_test", {
+            circuitPath: path.join(circuitDir, "random_test.circom"),
+            power: 13,
+        })).rejects.toThrow("options.ptauName is required");
+    });
+
+    it("should throw if ptau entropy not provided", async () => {
+        await expect(completeSetup("random_test", {
+            circuitPath: path.join(circuitDir, "random_test.circom"),
+            power: 13,
+            ptauName: "pot13_final.ptau",
+        })).rejects.toThrow("options.ptauEntropy is required");
+    });
+
+    it("should throw if groth16 entropy not provided", async () => {
+        await expect(completeSetup("random_test", {
+            circuitPath: path.join(circuitDir, "random_test.circom"),
+            power: 13,
+            ptauName: "pot13_final.ptau",
+            ptauEntropy: "0x1234",
+        })).rejects.toThrow("options.setupEntropy is required");
+    });
+
+    it("should execute complete setup workflow", async () => {
+        const result = await completeSetup("random_test", {
+            circuitPath: path.join(circuitDir, "random_test.circom"),
+            power: 13,
+            ptauName: "pot13_final.ptau",
+            ptauEntropy: TEST_PTAU_ENTROPY,
+            setupEntropy: TEST_SETUP_ENTROPY,
+        });
+        expect(result).toBeDefined();
+        expect(result.r1csPath).toBeDefined();
+        expect(result.r1csPath).toContain("build");
+        expect(fs.existsSync(result.r1csPath)).toBe(true);
+        expect(result.wasmPath).toBeDefined();
+        expect(result.wasmPath).toContain("build");
+        expect(fs.existsSync(result.wasmPath)).toBe(true);
+        expect(result.ptauPath).toBeDefined();
+        expect(fs.existsSync(result.ptauPath)).toBe(true);
+        expect(result.zkeyPath).toBeDefined();
+        expect(result.zkeyPath).toContain("build");
+        expect(fs.existsSync(result.zkeyPath)).toBe(true);
+        expect(result.vkeyPath).toBeDefined();
+        expect(result.vkeyPath).toContain("build");
+        expect(fs.existsSync(result.vkeyPath)).toBe(true);
+
+
+    }, 300000);
+
+    afterAll(() => {
+        cleanupTestArtifacts(13);
     });
 });

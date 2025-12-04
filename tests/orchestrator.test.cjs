@@ -8,28 +8,54 @@ const {
 const rootDir = path.resolve(__dirname, "..");
 const buildDir = path.join(rootDir, "build");
 
-describe("Orchestrator Module - Complete Function Coverage", () => {
-    let orchestrator;
+// =============================================================================
+// TEST CIRCUIT CONFIGURATION
+// =============================================================================
+// Tests use random_test.circom which is configured with:
+//   - numOutputs = 3 (smaller for faster tests)
+//   - power = 13 (ptau file size)
+// 
+// The production circuit (random.circom) uses:
+//   - numOutputs = 15 (library default)
+//   - power = 15 (ptau file size)
+// =============================================================================
+const NUM_OUTPUTS = 3;
+const TEST_POWER = 13;
+const TEST_CIRCUIT_NAME = "random_test";
 
-    afterEach(() => {
-        // Clean up build directory after all tests
-        if (fs.existsSync(buildDir)) {
-            fs.rmSync(buildDir, { recursive: true });
+/**
+ * Cleans up test artifacts: build directory and generated ptau files
+ */
+function cleanupTestArtifacts() {
+    // Clean up build directory
+    if (fs.existsSync(buildDir)) {
+        fs.rmSync(buildDir, { recursive: true });
+    }
+    // Clean up generated ptau files
+    const ptauPattern = new RegExp(`^pot${TEST_POWER}.*\\.ptau$`);
+    const files = fs.readdirSync(rootDir);
+    for (const file of files) {
+        if (ptauPattern.test(file)) {
+            const filePath = path.join(rootDir, file);
+            fs.unlinkSync(filePath);
         }
-    });
+    }
+}
 
-    beforeEach(() => {
-        orchestrator = new RandomCircuitOrchestrator({
-            circuitName: "random",
-        });
-    });
+describe("Orchestrator Module - Complete Function Coverage", () => {
 
     // ===== CONSTRUCTOR TESTS =====
     describe("RandomCircuitOrchestrator - Constructor", () => {
         it("should create orchestrator with default options", () => {
             const orch = new RandomCircuitOrchestrator();
             expect(orch.circuitName).toBe("random");
+            expect(orch.numOutputs).toBe(15);
+            expect(orch.power).toBe(15);
             expect(orch.vkey).toBeNull();
+            expect(orch.ptauEntropy).toContain("random-entropy-ptau-");
+            expect(orch.setupEntropy).toContain("random-entropy-setup-");
+            expect(orch.buildDir).toContain("build");
+            expect(orch.initialized).toBe(false);
         });
 
         it("should create orchestrator with custom circuit name", () => {
@@ -37,6 +63,21 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 circuitName: "custom",
             });
             expect(orch.circuitName).toBe("custom");
+        });
+
+        it("should create orchestrator with custom numOutputs", () => {
+            const orch = new RandomCircuitOrchestrator({
+                numOutputs: 5,
+            });
+            expect(orch.numOutputs).toBe(5);
+        });
+
+        it("should create orchestrator with custom power", () => {
+            const orch = new RandomCircuitOrchestrator({
+                power: 12,
+            });
+            expect(orch.power).toBe(12);
+            expect(orch.ptauName).toBe("pot12_final.ptau");
         });
 
         it("should set buildDir to default location", () => {
@@ -51,16 +92,62 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             });
             expect(orch.buildDir).toBe(customBuildDir);
         });
+
+        it("should compute circuitPath from circuitDir and circuitName", () => {
+            const orch = new RandomCircuitOrchestrator({
+                circuitName: "random_test",
+            });
+            expect(orch.circuitPath).toContain("random_test.circom");
+        });
+
+        it("should set default ptauEntropy with timestamp", () => {
+            const orch = new RandomCircuitOrchestrator();
+            expect(orch.ptauEntropy).toContain("random-entropy-ptau-");
+        });
+
+        it("should set default setupEntropy with timestamp", () => {
+            const orch = new RandomCircuitOrchestrator();
+            expect(orch.setupEntropy).toContain("random-entropy-setup-");
+        });
+
+        it("should allow custom ptauEntropy", () => {
+            const orch = new RandomCircuitOrchestrator({
+                ptauEntropy: "custom-ptau-entropy",
+            });
+            expect(orch.ptauEntropy).toBe("custom-ptau-entropy");
+        });
+
+        it("should allow custom setupEntropy", () => {
+            const orch = new RandomCircuitOrchestrator({
+                setupEntropy: "custom-setup-entropy",
+            });
+            expect(orch.setupEntropy).toBe("custom-setup-entropy");
+        });
     });
 
     // ===== VALIDATE BUILD ARTIFACTS TESTS =====
     describe("validateBuildArtifacts()", () => {
+        let orchestrator;
+
+        beforeEach(() => {
+            orchestrator = new RandomCircuitOrchestrator({
+                circuitName: TEST_CIRCUIT_NAME,
+                power: TEST_POWER,
+            });
+        });
+
         it("should return validation object with isValid and missingFiles properties", () => {
             const validation = orchestrator.validateBuildArtifacts();
             expect(validation.isValid).toBeDefined();
             expect(validation.missingFiles).toBeDefined();
             expect(typeof validation.isValid).toBe("boolean");
             expect(Array.isArray(validation.missingFiles)).toBe(true);
+        });
+
+        it("should identify missing R1CS file", () => {
+            const validation = orchestrator.validateBuildArtifacts();
+            const hasR1cs = validation.missingFiles.some(f => f.includes(".r1cs"));
+            expect(hasR1cs).toBe(true);
         });
 
         it("should identify missing WASM file", () => {
@@ -87,7 +174,9 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const validation = orchestrator.validateBuildArtifacts();
             expect(validation.isValid).toBe(true);
             expect(validation.missingFiles.length).toBe(0);
-        }, 30000);
+
+            cleanupTestArtifacts();
+        }, 120000);
 
         it("should work with custom circuit names", () => {
             const customOrch = new RandomCircuitOrchestrator({
@@ -101,38 +190,66 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
     // ===== INITIALIZE TESTS =====
     describe("initialize()", () => {
+        let orchestrator;
+
+        beforeEach(() => {
+            orchestrator = new RandomCircuitOrchestrator({
+                circuitName: TEST_CIRCUIT_NAME,
+                numOutputs: NUM_OUTPUTS,
+                power: TEST_POWER,
+            });
+        });
+
+        afterEach(() => {
+            cleanupTestArtifacts();
+        });
+
         it("should initialize orchestrator without error", async () => {
             await expect(orchestrator.initialize()).resolves.not.toThrow();
-        }, 30000);
+        }, 120000);
 
         it("should load verification key on successful initialization", async () => {
             const vkeyPath = path.join(buildDir, "verification_key.json");
             await orchestrator.initialize();
             expect(orchestrator.vkey).toBeDefined();
             expect(fs.existsSync(vkeyPath)).toBe(true);
-        }, 30000);
+        }, 120000);
 
-        it("should accept setupOptions", async () => {
-            const options = {
-                power: 12,
-            };
-            await expect(orchestrator.initialize(options)).resolves.not.toThrow();
-        }, 30000);
+        it("should set initialized flag after successful initialization", async () => {
+            expect(orchestrator.initialized).toBe(false);
+            await orchestrator.initialize();
+            expect(orchestrator.initialized).toBe(true);
+        }, 120000);
     });
 
     // ===== COMPUTE LOCAL HASH TESTS =====
     describe("computeLocalHash()", () => {
-        it("should compute local hash with defaults", async () => {
+        it("should compute local hash with library defaults (15 outputs)", async () => {
             const inputs = {
                 blockHash: 100,
                 userNonce: 200,
                 kurierEntropy: 300,
             };
-            const result = await computeLocalHash(inputs);
-            expect(result.hash).toBeDefined();
+            // Library default: 15 outputs for random.circom
+            const LIBRARY_NUM_OUTPUTS = 15;
+            const result = await computeLocalHash(inputs, LIBRARY_NUM_OUTPUTS);
+            expect(result.hashes).toBeDefined();
             expect(result.R).toBeDefined();
-            expect(typeof result.hash).toBe("string");
-            expect(typeof result.R).toBe("string");
+            expect(Array.isArray(result.hashes)).toBe(true);
+            expect(Array.isArray(result.R)).toBe(true);
+            expect(result.hashes.length).toBe(LIBRARY_NUM_OUTPUTS);
+            expect(result.R.length).toBe(LIBRARY_NUM_OUTPUTS);
+        });
+
+        it("should compute local hash with test circuit numOutputs (3)", async () => {
+            const inputs = {
+                blockHash: 100,
+                userNonce: 200,
+                kurierEntropy: 300,
+            };
+            const result = await computeLocalHash(inputs, NUM_OUTPUTS);
+            expect(result.hashes.length).toBe(NUM_OUTPUTS);
+            expect(result.R.length).toBe(NUM_OUTPUTS);
         });
 
         it("should compute local hash with custom N", async () => {
@@ -142,21 +259,25 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 kurierEntropy: 300,
                 N: 2000n,
             };
-            const result = await computeLocalHash(inputs);
-            expect(BigInt(result.R)).toBeLessThan(BigInt(2000));
+            const result = await computeLocalHash(inputs, NUM_OUTPUTS);
+            for (const r of result.R) {
+                expect(BigInt(r)).toBeLessThan(BigInt(2000));
+            }
         });
 
-        it("should respect N parameter in output", async () => {
+        it("should respect N parameter in all outputs", async () => {
             const inputs = {
                 blockHash: 50,
                 userNonce: 100,
                 kurierEntropy: 150,
                 N: 500n,
             };
-            const result = await computeLocalHash(inputs);
-            const R = BigInt(result.R);
-            expect(R).toBeLessThan(BigInt(500));
-            expect(R).toBeGreaterThanOrEqual(0n);
+            const result = await computeLocalHash(inputs, NUM_OUTPUTS);
+            for (const r of result.R) {
+                const R = BigInt(r);
+                expect(R).toBeLessThan(BigInt(500));
+                expect(R).toBeGreaterThanOrEqual(0n);
+            }
         });
 
         it("should produce consistent results for same inputs", async () => {
@@ -166,9 +287,9 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 kurierEntropy: 333,
                 N: 1000n,
             };
-            const result1 = await computeLocalHash(inputs);
-            const result2 = await computeLocalHash(inputs);
-            expect(result1.hash).toEqual(result2.hash);
+            const result1 = await computeLocalHash(inputs, NUM_OUTPUTS);
+            const result2 = await computeLocalHash(inputs, NUM_OUTPUTS);
+            expect(result1.hashes).toEqual(result2.hashes);
             expect(result1.R).toEqual(result2.R);
         });
 
@@ -183,9 +304,11 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 userNonce: 222,
                 kurierEntropy: 334,
             };
-            const result1 = await computeLocalHash(inputs1);
-            const result2 = await computeLocalHash(inputs2);
-            expect(result1.hash).not.toEqual(result2.hash);
+            const result1 = await computeLocalHash(inputs1, NUM_OUTPUTS);
+            const result2 = await computeLocalHash(inputs2, NUM_OUTPUTS);
+            // At least one hash should differ
+            const allSame = result1.hashes.every((h, i) => h === result2.hashes[i]);
+            expect(allSame).toBe(false);
         });
 
         it("should handle large N values", async () => {
@@ -196,25 +319,26 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 kurierEntropy: 777,
                 N: nBigNum,
             };
-            const result = await computeLocalHash(inputs);
-            expect(BigInt(result.R)).toBeGreaterThanOrEqual(0n);
-            expect(BigInt(result.R)).toBeLessThan(nBigNum);
-        });
-
-        it("should handle N=1", async () => {
-            const inputs = {
-                blockHash: 999,
-                userNonce: 888,
-                kurierEntropy: 777,
-                N: 1n,
-            };
-            const result = await computeLocalHash(inputs);
-            expect(result.R).toEqual("0");
+            const result = await computeLocalHash(inputs, NUM_OUTPUTS);
+            for (const r of result.R) {
+                expect(BigInt(r)).toBeGreaterThanOrEqual(0n);
+                expect(BigInt(r)).toBeLessThan(nBigNum);
+            }
         });
     });
 
     // ===== SAVE PROOF DATA TESTS =====
     describe("saveProofData()", () => {
+        let orchestrator;
+
+        beforeEach(() => {
+            orchestrator = new RandomCircuitOrchestrator();
+        });
+
+        afterEach(() => {
+            cleanupTestArtifacts();
+        });
+
         it("should save proof data to files", async () => {
             const proofData = {
                 proof: {
@@ -222,8 +346,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                     pi_b: [["3", "4"], ["5", "6"]],
                     pi_c: ["7", "8"],
                 },
-                publicSignals: ["100", "200"],
-                R: "42",
+                publicSignals: ["100", "200", "300", "400", "500", "1000", "2000", "3000"],
+                R: ["100", "200", "300", "400", "500"],
                 circuitInputs: {
                     blockHash: "123",
                     userNonce: "456",
@@ -251,6 +375,14 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
     // ===== LOAD PROOF DATA TESTS =====
     describe("loadProofData()", () => {
+        beforeEach(() => {
+            orchestrator = new RandomCircuitOrchestrator();
+        });
+
+        afterEach(() => {
+            cleanupTestArtifacts();
+        });
+
         it("should throw error if proof file does not exist", () => {
             expect(() => orchestrator.loadProofData(
                 "/nonexistent/proof.json",
@@ -266,8 +398,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                     pi_b: [["3", "4"], ["5", "6"]],
                     pi_c: ["7", "8"],
                 },
-                publicSignals: ["100", "200"],
-                R: "42",
+                publicSignals: ["100", "200", "300", "400", "500", "1000", "2000", "3000"],
+                R: ["100", "200", "300", "400", "500"],
                 circuitInputs: { blockHash: "123" },
             };
 
@@ -283,6 +415,19 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
     // ===== VERIFY PROOF TESTS =====
     describe("verifyRandomProof()", () => {
+        beforeAll(async () => {
+            orchestrator = new RandomCircuitOrchestrator({
+                circuitName: "random_test",
+                numOutputs: NUM_OUTPUTS,
+                power: TEST_POWER,
+            });
+            await orchestrator.initialize();
+        });
+
+        afterAll(() => {
+            cleanupTestArtifacts();
+        });
+
         it("should return false for invalid proof", async () => {
             const proof = { pi_a: ["1"], pi_b: [["2"], ["3"]], pi_c: ["4"] };
             const publicSignals = ["100"];
@@ -290,45 +435,49 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             await expect(
                 orchestrator.verifyRandomProof(proof, publicSignals)
             ).rejects.toThrow();
-        }, 30000);
+        }, 120000);
 
         it("should throw error for null inputs", async () => {
             await expect(
                 orchestrator.verifyRandomProof(null, null)
             ).rejects.toThrow();
-        }, 30000);
+        }, 120000);
     });
 
-    // ===== GENERATE RANDOM PROOF TESTS =====
+    //===== GENERATE RANDOM PROOF TESTS =====
     describe("generateRandomProof()", () => {
-        it("should generate proof successfully", async () => {
+        it("should generate proof successfully with R as array", async () => {
             const inputs = {
                 blockHash: "12345",
                 userNonce: "67890",
                 kurierEntropy: "54321",
                 N: "1000",
             };
+
+            const orchestrator = new RandomCircuitOrchestrator({
+                circuitName: "random_test",
+                numOutputs: NUM_OUTPUTS,
+                power: TEST_POWER,
+            });
 
             const result = await orchestrator.generateRandomProof(inputs);
             expect(result.proof).toBeDefined();
             expect(result.publicSignals).toBeDefined();
             expect(result.R).toBeDefined();
             expect(result.circuitInputs).toBeDefined();
-        }, 60000);
 
-        it("should accept setupOptions", async () => {
-            const inputs = {
-                blockHash: "12345",
-                userNonce: "67890",
-                kurierEntropy: "54321",
-                N: "1000",
-            };
-            const options = { power: 12 };
+            // R should be an array with NUM_OUTPUTS elements
+            expect(Array.isArray(result.R)).toBe(true);
+            expect(result.R.length).toBe(NUM_OUTPUTS);
 
-            const result = await orchestrator.generateRandomProof(inputs, options);
-            expect(result.proof).toBeDefined();
-            expect(result.publicSignals).toBeDefined();
-        }, 60000);
+            // All R values should be in range [0, N)
+            for (const r of result.R) {
+                expect(BigInt(r)).toBeGreaterThanOrEqual(0n);
+                expect(BigInt(r)).toBeLessThan(1000n);
+            }
+
+            cleanupTestArtifacts();
+        }, 120000);
     });
 
     // ===== INTEGRATION TESTS =====

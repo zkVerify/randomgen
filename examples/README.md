@@ -196,17 +196,17 @@ const { RandomCircuitOrchestrator } = require("randomgen");
 const path = require("path");
 
 async function customCircuit() {
+  // All configuration is set in constructor
   const orchestrator = new RandomCircuitOrchestrator({
     circuitName: "random",
     buildDir: "/custom/build/path",
-  });
-  
-  // Generate with custom parameters
-  await orchestrator.initialize({
     circuitPath: path.join(__dirname, "circuits/random.circom"),
+    numOutputs: 15,
     power: 12,
     ptauName: "pot12_final.ptau",
   });
+  
+  await orchestrator.initialize();
   
   const proof = await orchestrator.generateRandomProof({
     blockHash: BigInt(999),
@@ -221,20 +221,22 @@ async function customCircuit() {
 
 ### Pattern 4: Low-Level Usage
 
+All utility functions require explicit parameters (no defaults).
+
 ```javascript
 const { utils, setup } = require("randomgen");
 
 async function lowLevel() {
-  // Compute hash directly
-  const hash = await utils.computePoseidonHash(1, 2, 3);
+  // Compute hash directly - nOuts is required
+  const hash = await utils.computePoseidonHash(1, 2, 3, 1);
   console.log("Hash:", hash);
   
-  // Generate random from seed
+  // Generate random from seed - N is required
   const random = utils.generateRandomFromSeed(hash, 1000);
   console.log("Random:", random);
   
-  // Compile and setup custom circuit
-  const { r1csPath, wasmPath } = await setup.compileCircuit("random");
+  // Compile and setup custom circuit - all parameters required
+  const { r1csPath, wasmPath } = await setup.compileCircuit("random", "circuits/random.circom");
   console.log("R1CS:", r1csPath);
   console.log("WASM:", wasmPath);
 }
@@ -271,7 +273,7 @@ The examples automatically generate artifacts on first run. If they fail:
 cd /home/danielecker/hl-crypto/randomgen
 npm run build
 # or
-node -e "const {setup} = require('./index'); setup.completeSetup('random');"
+node -e "const {setup} = require('./index'); setup.completeSetup('random', { circuitPath: 'circuits/random.circom', power: 15, ptauName: 'pot15_final.ptau' });"
 ```
 
 ### "Proof verification failed"

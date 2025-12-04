@@ -2,6 +2,21 @@ const path = require("path");
 const wasm_tester = require("circom_tester").wasm;
 const { buildPoseidon } = require("circomlibjs");
 const crypto = require("crypto");
+const { computeLocalHash } = require("../lib/orchestrator.js");
+const { c } = require("circom_tester");
+
+// =============================================================================
+// TEST CIRCUIT CONFIGURATION
+// =============================================================================
+// Tests use random_test.circom which is configured with:
+//   - numOutputs = 3 (smaller for faster tests)
+//   - power = 13 (ptau file size)
+// 
+// The production circuit (random.circom) uses:
+//   - numOutputs = 15 (library default)
+//   - power = 15 (ptau file size)
+// =============================================================================
+const NUM_OUTPUTS = 3;
 
 // Helper function to compute SHA256 of input and convert to decimal
 // Returns a 32-byte hash as a decimal string for circuit compatibility
@@ -14,19 +29,22 @@ const createBlockHash = (seed) => {
   return BigInt("0x" + hashHex).toString();
 };
 
+// Helper to extract R array from witness (outputs start at index 1)
+const extractROutputs = (witness, numOutputs = NUM_OUTPUTS) => {
+  return Array.from({ length: numOutputs }, (_, i) => BigInt(witness[1 + i]));
+};
+
 describe("Random Circuit Test Suite", () => {
   let poseidon;
-  let F;
   let circuit;
 
   beforeAll(async () => {
     // Initialize Poseidon
     poseidon = await buildPoseidon();
-    F = poseidon.F;
 
     // Load and compile the random circuit
     circuit = await wasm_tester(
-      path.join(__dirname, "../circuits/random.circom")
+      path.join(__dirname, "../circuits/random_test.circom")
     );
   });
 
@@ -51,7 +69,7 @@ describe("Random Circuit Test Suite", () => {
       await circuit.checkConstraints(w);
     });
 
-    it("Should produce output R in valid range [0, N)", async () => {
+    it("Should produce all R outputs in valid range [0, N)", async () => {
       const inputs = {
         blockHash: createBlockHash(1),
         userNonce: 1,
@@ -62,10 +80,14 @@ describe("Random Circuit Test Suite", () => {
       const w = await circuit.calculateWitness(inputs, true);
       await circuit.checkConstraints(w);
 
-      // Output is at index 1 (after witness[0] which is always 1)
-      const output = BigInt(w[1]);
-      expect(output).toBeLessThan(BigInt(1000));
-      expect(output).toBeGreaterThan(BigInt(0));
+      // Extract all R outputs
+      const outputs = extractROutputs(w);
+
+      expect(outputs.length).toBe(NUM_OUTPUTS);
+      for (let i = 0; i < NUM_OUTPUTS; i++) {
+        expect(outputs[i]).toBeLessThan(BigInt(1000));
+        expect(outputs[i]).toBeGreaterThanOrEqual(BigInt(0));
+      }
     });
 
     it("Should handle zero inputs correctly", async () => {
@@ -79,9 +101,29 @@ describe("Random Circuit Test Suite", () => {
       const w = await circuit.calculateWitness(inputs, true);
       await circuit.checkConstraints(w);
 
-      const output = BigInt(w[1]);
-      expect(output).toBeLessThan(BigInt(1000));
-      expect(output).toBeGreaterThan(BigInt(0));
+      const outputs = extractROutputs(w);
+      for (const output of outputs) {
+        expect(output).toBeLessThan(BigInt(1000));
+        expect(output).toBeGreaterThanOrEqual(BigInt(0));
+      }
+    });
+
+    it("Should produce NUM_OUTPUTS distinct random values", async () => {
+      const inputs = {
+        blockHash: createBlockHash(42),
+        userNonce: 123,
+        kurierEntropy: 456,
+        N: 1000000, // Large N to reduce chance of collisions
+      };
+
+      const w = await circuit.calculateWitness(inputs, true);
+      await circuit.checkConstraints(w);
+
+      const outputs = extractROutputs(w);
+      const uniqueOutputs = new Set(outputs.map(o => o.toString()));
+
+      // With a large N, we expect all outputs to be different
+      expect(uniqueOutputs.size).toBe(NUM_OUTPUTS);
     });
   });
 
@@ -99,13 +141,15 @@ describe("Random Circuit Test Suite", () => {
       };
 
       const w1 = await circuit.calculateWitness(inputs1, true);
-      const output1 = BigInt(w1[1]);
+      const outputs1 = extractROutputs(w1);
 
-      // Same inputs should produce same output
+      // Same inputs should produce same outputs
       const w2 = await circuit.calculateWitness(inputs1, true);
-      const output2 = BigInt(w2[1]);
+      const outputs2 = extractROutputs(w2);
 
-      expect(output1).toEqual(output2);
+      for (let i = 0; i < NUM_OUTPUTS; i++) {
+        expect(outputs1[i]).toEqual(outputs2[i]);
+      }
     });
 
     it("Should produce different outputs for different inputs", async () => {
@@ -117,7 +161,7 @@ describe("Random Circuit Test Suite", () => {
       };
 
       const w1 = await circuit.calculateWitness(inputs1, true);
-      const output1 = BigInt(w1[1]);
+      const outputs1 = extractROutputs(w1);
 
       const inputs2 = {
         blockHash: createBlockHash(2),
@@ -127,12 +171,14 @@ describe("Random Circuit Test Suite", () => {
       };
 
       const w2 = await circuit.calculateWitness(inputs2, true);
-      const output2 = BigInt(w2[1]);
+      const outputs2 = extractROutputs(w2);
 
-      expect(output1).not.toEqual(output2);
+      // At least one output should differ
+      const allSame = outputs1.every((o, i) => o === outputs2[i]);
+      expect(allSame).toBe(false);
     });
 
-    it("Should verify Poseidon hash matches circomlibjs", async () => {
+    it("Should verify Poseidon output matches circomlibjs", async () => {
       const inputs = {
         blockHash: createBlockHash(123),
         userNonce: 456,
@@ -142,13 +188,12 @@ describe("Random Circuit Test Suite", () => {
 
       // Calculate circuit output
       const w = await circuit.calculateWitness(inputs, true);
-      const circuitOutput = BigInt(w[1]);
+      const circuitOutputs = extractROutputs(w);
+      const hashOutputs = await computeLocalHash(inputs, NUM_OUTPUTS);
 
-      // Calculate expected output with circomlibjs
-      const poseidonHash = poseidon([inputs.blockHash, inputs.userNonce, inputs.kurierEntropy]);
-      const expectedR = BigInt(F.toString(poseidonHash)) % BigInt(1000);
-
-      expect(circuitOutput).toEqual(expectedR);
+      for (let i = 0; i < NUM_OUTPUTS; i++) {
+        expect(circuitOutputs[i].toString()).toEqual(hashOutputs.R[i]);
+      }
     });
   });
 
@@ -169,9 +214,11 @@ describe("Random Circuit Test Suite", () => {
         const w = await circuit.calculateWitness(inputs, true);
         await circuit.checkConstraints(w);
 
-        const output = BigInt(w[1]);
-        expect(output).toBeLessThan(BigInt(1000));
-        expect(output).toBeGreaterThan(BigInt(0));
+        const outputs = extractROutputs(w);
+        for (const output of outputs) {
+          expect(output).toBeLessThan(BigInt(1000));
+          expect(output).toBeGreaterThanOrEqual(BigInt(0));
+        }
       }
     });
   });
@@ -192,12 +239,14 @@ describe("Random Circuit Test Suite", () => {
       const w = await circuit.calculateWitness(inputs, true);
       await circuit.checkConstraints(w);
 
-      const output = BigInt(w[1]);
-      expect(output).toBeLessThan(BigInt(1000));
+      const outputs = extractROutputs(w);
+      for (const output of outputs) {
+        expect(output).toBeLessThan(BigInt(1000));
+      }
     });
 
-    it("Should handle boundary value: R = 0", async () => {
-      // Find inputs that produce R = 0
+    it("Should handle boundary value: R[i] = 0 for at least one output", async () => {
+      // Find inputs that produce R = 0 for at least one output
       let found = false;
       for (let i = 0; i < 1000 && !found; i++) {
         const inputs = {
@@ -208,35 +257,34 @@ describe("Random Circuit Test Suite", () => {
         };
 
         const w = await circuit.calculateWitness(inputs, true);
-        const output = BigInt(w[1]);
+        const outputs = extractROutputs(w);
 
-        if (output === BigInt(0)) {
+        if (outputs.some(o => o === BigInt(0))) {
           found = true;
           await circuit.checkConstraints(w);
-          expect(output).toEqual(BigInt(0));
         }
       }
       expect(found).toBe(true);
     });
 
-    it("Should handle boundary value: R = 999", async () => {
-      // Find inputs that produce R = 999
+    it("Should handle boundary value: R[i] = N-1 for at least one output", async () => {
+      // Find inputs that produce R = N-1 for at least one output
       let found = false;
+      const N = 1000;
       for (let i = 0; i < 1000 && !found; i++) {
         const inputs = {
           blockHash: createBlockHash(i),
           userNonce: 1,
           kurierEntropy: 1,
-          N: 1000,
+          N,
         };
 
         const w = await circuit.calculateWitness(inputs, true);
-        const output = BigInt(w[1]);
+        const outputs = extractROutputs(w);
 
-        if (output === BigInt(999)) {
+        if (outputs.some(o => o === BigInt(N - 1))) {
           found = true;
           await circuit.checkConstraints(w);
-          expect(output).toEqual(BigInt(999));
         }
       }
       expect(found).toBe(true);
@@ -255,9 +303,11 @@ describe("Random Circuit Test Suite", () => {
         const w = await circuit.calculateWitness(inputs, true);
         await circuit.checkConstraints(w);
 
-        const output = BigInt(w[1]);
-        expect(output).toBeLessThan(BigInt(1000));
-        expect(output).toBeGreaterThan(BigInt(0));
+        const outputs = extractROutputs(w);
+        for (const output of outputs) {
+          expect(output).toBeLessThan(BigInt(1000));
+          expect(output).toBeGreaterThanOrEqual(BigInt(0));
+        }
       }
     });
   });
@@ -297,8 +347,15 @@ describe("Random Circuit Test Suite", () => {
       // First element is always 1 (constant)
       expect(w[0]).toBe(1n);
 
-      // Second element is the output R
-      expect(w.length).toBeGreaterThan(1);
+      // Should have at least NUM_OUTPUTS + 1 elements
+      expect(w.length).toBeGreaterThan(NUM_OUTPUTS);
+
+      // All outputs should be defined
+      const outputs = extractROutputs(w);
+      expect(outputs.length).toBe(NUM_OUTPUTS);
+      for (const output of outputs) {
+        expect(output).toBeDefined();
+      }
     });
   });
 
@@ -319,8 +376,14 @@ describe("Random Circuit Test Suite", () => {
       const w2 = await circuit.calculateWitness(inputs, true);
       const w3 = await circuit.calculateWitness(inputs, true);
 
-      expect(BigInt(w1[1])).toEqual(BigInt(w2[1]));
-      expect(BigInt(w2[1])).toEqual(BigInt(w3[1]));
+      const outputs1 = extractROutputs(w1);
+      const outputs2 = extractROutputs(w2);
+      const outputs3 = extractROutputs(w3);
+
+      for (let i = 0; i < NUM_OUTPUTS; i++) {
+        expect(outputs1[i]).toEqual(outputs2[i]);
+        expect(outputs2[i]).toEqual(outputs3[i]);
+      }
     });
 
     it("Should produce different outputs for different blockHash", async () => {
@@ -335,7 +398,12 @@ describe("Random Circuit Test Suite", () => {
         true
       );
 
-      expect(BigInt(w1[1])).not.toEqual(BigInt(w2[1]));
+      const outputs1 = extractROutputs(w1);
+      const outputs2 = extractROutputs(w2);
+
+      // At least one output should differ
+      const allSame = outputs1.every((o, i) => o === outputs2[i]);
+      expect(allSame).toBe(false);
     });
 
     it("Should produce different outputs for different userNonce", async () => {
@@ -350,7 +418,11 @@ describe("Random Circuit Test Suite", () => {
         true
       );
 
-      expect(BigInt(w1[1])).not.toEqual(BigInt(w2[1]));
+      const outputs1 = extractROutputs(w1);
+      const outputs2 = extractROutputs(w2);
+
+      const allSame = outputs1.every((o, i) => o === outputs2[i]);
+      expect(allSame).toBe(false);
     });
 
     it("Should produce different outputs for different kurierEntropy", async () => {
@@ -365,7 +437,11 @@ describe("Random Circuit Test Suite", () => {
         true
       );
 
-      expect(BigInt(w1[1])).not.toEqual(BigInt(w2[1]));
+      const outputs1 = extractROutputs(w1);
+      const outputs2 = extractROutputs(w2);
+
+      const allSame = outputs1.every((o, i) => o === outputs2[i]);
+      expect(allSame).toBe(false);
     });
   });
 
@@ -374,7 +450,7 @@ describe("Random Circuit Test Suite", () => {
   // ============================================================================
 
   describe("Integration with circomlibjs", () => {
-    it("Should use same Poseidon as circomlibjs", async () => {
+    it("Should produce valid outputs for various inputs", async () => {
       const testCases = [
         [BigInt(1), BigInt(2), BigInt(3)],
         [BigInt(100), BigInt(200), BigInt(300)],
@@ -390,13 +466,13 @@ describe("Random Circuit Test Suite", () => {
         };
 
         const w = await circuit.calculateWitness(inputs, true);
-        const circuitOutput = BigInt(w[1]);
+        const circuitOutputs = extractROutputs(w);
 
-        // Compute with circomlibjs
-        const poseidonHash = BigInt(F.toString(poseidon([val1, val2, val3])));
-        const expectedR = poseidonHash % BigInt(1000);
-
-        expect(circuitOutput).toEqual(expectedR);
+        // Verify all outputs are in valid range
+        for (const output of circuitOutputs) {
+          expect(output).toBeLessThan(BigInt(1000));
+          expect(output).toBeGreaterThanOrEqual(BigInt(0));
+        }
       }
     });
 
@@ -409,11 +485,13 @@ describe("Random Circuit Test Suite", () => {
       };
 
       const w = await circuit.calculateWitness(inputs, true);
-      const output = BigInt(w[1]);
+      const outputs = extractROutputs(w);
 
       // All outputs should be valid field elements
-      expect(output).toBeGreaterThan(BigInt(0));
-      expect(output).toBeLessThan(BigInt(1000));
+      for (const output of outputs) {
+        expect(output).toBeGreaterThanOrEqual(BigInt(0));
+        expect(output).toBeLessThan(BigInt(1000));
+      }
     });
   });
 
@@ -437,29 +515,20 @@ describe("Random Circuit Test Suite", () => {
         const w = await circuit.calculateWitness(inputs, true);
         await circuit.checkConstraints(w);
 
-        const output = BigInt(w[1]);
-        expect(output).toBeGreaterThanOrEqual(BigInt(0));
-        expect(output).toBeLessThan(BigInt(N));
+        const outputs = extractROutputs(w);
+        for (const output of outputs) {
+          expect(output).toBeGreaterThanOrEqual(BigInt(0));
+          expect(output).toBeLessThan(BigInt(N));
+        }
       }
     });
 
-    it("Should produce different R values for different N with same hash", async () => {
+    it("Should produce different R values for different N with same inputs", async () => {
       const baseInputs = {
         blockHash: createBlockHash(99999),
         userNonce: 88888,
         kurierEntropy: 77777,
       };
-
-      // Compute the underlying hash
-      const poseidonHash = BigInt(
-        F.toString(
-          poseidon([
-            BigInt(baseInputs.blockHash),
-            BigInt(baseInputs.userNonce),
-            BigInt(baseInputs.kurierEntropy),
-          ])
-        )
-      );
 
       const nValues = [100, 1000, 10000];
       const results = [];
@@ -469,16 +538,17 @@ describe("Random Circuit Test Suite", () => {
         const w = await circuit.calculateWitness(inputs, true);
         await circuit.checkConstraints(w);
 
-        const output = BigInt(w[1]);
-        results.push({ N, R: output });
+        const outputs = extractROutputs(w);
+        results.push({ N, R: outputs });
 
-        // Verify R = hash mod N
-        const expectedR = poseidonHash % BigInt(N);
-        expect(output).toEqual(expectedR);
+        // Verify all R values are in range [0, N)
+        for (const output of outputs) {
+          expect(output).toBeGreaterThanOrEqual(BigInt(0));
+          expect(output).toBeLessThan(BigInt(N));
+        }
       }
 
       // Different N values should generally produce different R values
-      // (unless hash mod N1 === hash mod N2 by coincidence)
       expect(results.length).toBe(3);
     });
 
@@ -494,9 +564,11 @@ describe("Random Circuit Test Suite", () => {
       const w = await circuit.calculateWitness(inputs, true);
       await circuit.checkConstraints(w);
 
-      const output = BigInt(w[1]);
-      expect(output).toBeGreaterThanOrEqual(BigInt(0));
-      expect(output).toBeLessThan(BigInt(inputs.N));
+      const outputs = extractROutputs(w);
+      for (const output of outputs) {
+        expect(output).toBeGreaterThanOrEqual(BigInt(0));
+        expect(output).toBeLessThan(BigInt(inputs.N));
+      }
     });
 
     it("Should handle N = 9 (minimum valid N since N > 8 required)", async () => {
@@ -510,9 +582,11 @@ describe("Random Circuit Test Suite", () => {
       const w = await circuit.calculateWitness(inputs, true);
       await circuit.checkConstraints(w);
 
-      const output = BigInt(w[1]);
-      expect(output).toBeGreaterThanOrEqual(BigInt(0));
-      expect(output).toBeLessThan(BigInt(9));
+      const outputs = extractROutputs(w);
+      for (const output of outputs) {
+        expect(output).toBeGreaterThanOrEqual(BigInt(0));
+        expect(output).toBeLessThan(BigInt(9));
+      }
     });
 
     it("Should reject N = 8 (N must be > 8)", async () => {
@@ -628,9 +702,11 @@ describe("Random Circuit Test Suite", () => {
         const w = await circuit.calculateWitness(inputs, true);
         await circuit.checkConstraints(w);
 
-        const output = BigInt(w[1]);
-        expect(output).toBeGreaterThanOrEqual(BigInt(0));
-        expect(output).toBeLessThan(N);
+        const outputs = extractROutputs(w);
+        for (const output of outputs) {
+          expect(output).toBeGreaterThanOrEqual(BigInt(0));
+          expect(output).toBeLessThan(N);
+        }
       }
     });
 

@@ -34,6 +34,8 @@ const colors = {
   cyan: "\x1b[36m",
 };
 
+const NUM_OUTPUTS = 15; // Number of random outputs to generate
+
 function log(message, color = "reset") {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
@@ -50,9 +52,14 @@ async function exampleCustomConfig() {
   section("Scenario 1: Custom Orchestrator Configuration");
 
   log("Creating orchestrator with custom settings...", "blue");
+  // All configuration is set in the constructor
   const customOrchestrator = new RandomCircuitOrchestrator({
     circuitName: "random",
     buildDir: path.join(__dirname, "../build"),
+    numOutputs: NUM_OUTPUTS,
+    // https://github.com/privacy-ethereum/perpetualpowersoftau
+    ptauName: "ppot_0080_15.ptau",
+    setupEntropy: "advanced-example-setup-entropy",
   });
 
   log("Validating build artifacts...", "blue");
@@ -77,7 +84,13 @@ async function exampleErrorHandling() {
 
   log("Test 1: Invalid input values", "blue");
   try {
-    const orchestrator = new RandomCircuitOrchestrator();
+    const orchestrator = new RandomCircuitOrchestrator({
+      numOutputs: NUM_OUTPUTS,
+      power: 15,
+      // https://github.com/privacy-ethereum/perpetualpowersoftau
+      ptauName: "ppot_0080_15.ptau",
+      setupEntropy: "advanced-example-setup-entropy",
+    });
     await orchestrator.initialize();
 
     const invalidInputs = {
@@ -126,24 +139,27 @@ async function exampleLowLevel() {
 
   // Test 1: Poseidon hashing
   log("\nTest 1: Direct Poseidon hashing", "blue");
-  const hash1 = await utils.computePoseidonHash(1, 2, 3);
-  const hash2 = await utils.computePoseidonHash(1, 2, 3);
+  let hash1 = await utils.computePoseidonHash(1, 2, 3, NUM_OUTPUTS);
+  let hash2 = await utils.computePoseidonHash(1, 2, 3, NUM_OUTPUTS);
   log(`Hash 1: ${hash1}`, "dim");
   log(`Hash 2: ${hash2}`, "dim");
-  log(`Consistent: ${hash1 === hash2}`, hash1 === hash2 ? "green" : "yellow");
+  hash1 = hash1.map(h => h.toString());
+  hash2 = hash2.map(h => h.toString());
+  const consistent = JSON.stringify(hash1) === JSON.stringify(hash2);
+  log(`Consistent: ${consistent}`, consistent ? "green" : "yellow");
 
-  // Test 2: Random generation
+  // Test 2: Random generation (N is now required)
   log("\nTest 2: Direct random generation from seed", "blue");
   const seed = hash1;
-  const random1 = utils.generateRandomFromSeed(seed, 1000);
-  const random2 = utils.generateRandomFromSeed(seed, 500);
+  const random1 = utils.generateRandomFromSeed(seed, 1000n);
+  const random2 = utils.generateRandomFromSeed(seed, 500n);
   log(`Seed: ${seed}`, "dim");
   log(`R (mod 1000): ${random1}`, "dim");
   log(`R (mod 500):  ${random2}`, "dim");
 
-  // Test 3: Circuit inputs
+  // Test 3: Circuit inputs (N is now required)
   log("\nTest 3: Create circuit inputs", "blue");
-  const circuitInputs = await utils.createCircuitInputs({
+  const circuitInputs = utils.createCircuitInputs({
     blockHash: 100,
     userNonce: 200,
     kurierEntropy: 300,
@@ -159,7 +175,14 @@ async function examplePerformance() {
   section("Scenario 4: Performance Measurement");
 
   try {
-    const orchestrator = new RandomCircuitOrchestrator();
+    // All configuration in constructor
+    const orchestrator = new RandomCircuitOrchestrator({
+      numOutputs: NUM_OUTPUTS,
+      power: 15,
+      // https://github.com/privacy-ethereum/perpetualpowersoftau
+      ptauName: "ppot_0080_15.ptau",
+      setupEntropy: "advanced-example-setup-entropy",
+    });
 
     log("Initializing orchestrator...", "blue");
     const initStart = Date.now();
@@ -181,7 +204,7 @@ async function examplePerformance() {
         N: 1000,
       };
 
-      // Measure proof generation
+      // Measure proof generation - uses numOutputs from constructor
       const proofStart = Date.now();
       const result = await orchestrator.generateRandomProof(inputs);
       const proofTime = Date.now() - proofStart;
@@ -197,7 +220,7 @@ async function examplePerformance() {
       const verifyTime = Date.now() - verifyStart;
       verifyTimes.push(verifyTime);
       log(`  Verification: ${verifyTime}ms`, "dim");
-      log(`  Result: R = ${result.publicSignals[0]}, Valid = ${isValid}`, "dim");
+      log(`  Result: R = ${result.R}, Valid = ${isValid}`, "dim");
     }
 
     // Statistics
@@ -231,7 +254,13 @@ async function exampleTampering() {
   section("Scenario 5: Proof Tampering Detection");
 
   try {
-    const orchestrator = new RandomCircuitOrchestrator();
+    // All configuration in constructor
+    const orchestrator = new RandomCircuitOrchestrator({
+      numOutputs: NUM_OUTPUTS,
+      // https://github.com/privacy-ethereum/perpetualpowersoftau
+      ptauName: "ppot_0080_15.ptau",
+      setupEntropy: "advanced-example-setup-entropy",
+    });
     await orchestrator.initialize();
 
     const inputs = {
