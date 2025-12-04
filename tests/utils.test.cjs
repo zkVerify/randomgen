@@ -20,15 +20,15 @@ const buildDir = path.join(rootDir, "build");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_test.circom which is configured with:
+// Tests use random_3.circom which is configured with:
 //   - numOutputs = 3 (smaller for faster tests)
 //   - power = 13 (ptau file size)
 // 
-// The production circuit (random.circom) uses:
+// The production circuit (random_15.circom) uses:
 //   - numOutputs = 15 (library default)
 //   - power = 15 (ptau file size)
 // =============================================================================
-const TEST_CIRCUIT_NAME = "random_test";
+const TEST_CIRCUIT_NAME = "random_3";
 const TEST_POWER = 13;
 const NUM_OUTPUTS = 3;
 const TEST_PTAU_ENTROPY = "0x1234";
@@ -346,10 +346,10 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should return correct wasm path with circuit name", () => {
-            const wasmPath = getWasmPath("random");
+            const wasmPath = getWasmPath("random_15");
             expect(wasmPath).toContain("build");
-            expect(wasmPath).toContain("random_js");
-            expect(wasmPath).toContain("random.wasm");
+            expect(wasmPath).toContain("random_15_js");
+            expect(wasmPath).toContain("random_15.wasm");
         });
 
         it("should return correct wasm path with custom circuit name", () => {
@@ -359,9 +359,9 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should return correct zkey path with circuit name", () => {
-            const zkeyPath = getFinalZkeyPath("random");
+            const zkeyPath = getFinalZkeyPath("random_15");
             expect(zkeyPath).toContain("build");
-            expect(zkeyPath).toContain("random_final.zkey");
+            expect(zkeyPath).toContain("random_15_final.zkey");
         });
 
         it("should return correct zkey path with custom circuit name", () => {
@@ -370,8 +370,8 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should generate absolute paths", () => {
-            const wasmPath = getWasmPath("random");
-            const zkeyPath = getFinalZkeyPath("random");
+            const wasmPath = getWasmPath("random_15");
+            const zkeyPath = getFinalZkeyPath("random_15");
             expect(path.isAbsolute(wasmPath)).toBe(true);
             expect(path.isAbsolute(zkeyPath)).toBe(true);
         });

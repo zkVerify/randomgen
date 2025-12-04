@@ -54,7 +54,7 @@ async function exampleCustomConfig() {
   log("Creating orchestrator with custom settings...", "blue");
   // All configuration is set in the constructor
   const customOrchestrator = new RandomCircuitOrchestrator({
-    circuitName: "random",
+    circuitName: "random_15",
     buildDir: path.join(__dirname, "../build"),
     numOutputs: NUM_OUTPUTS,
     // https://github.com/privacy-ethereum/perpetualpowersoftau

@@ -22,12 +22,36 @@ Each output `R[i]` is in the range [0, N).
 
 ### Circuit Variants
 
-The library includes two circuit configurations:
+The library provides **15 pre-generated circuit variants**, each configured for a different number of random outputs (1-15). All circuits share the same template logic from `random_template.circom`.
 
-| Circuit              | numOutputs | ptau power | Use Case                     |
-| -------------------- | ---------- | ---------- | ---------------------------- |
-| `random.circom`      | 15         | 15         | Production (library default) |
-| `random_test.circom` | 3          | 13         | Testing (faster compilation) |
+| Circuit File                           | numOutputs | Recommended Power | Use Case                     |
+| -------------------------------------- | ---------- | ----------------- | ---------------------------- |
+| `random_1.circom`                      | 1          | 12                | Single random value          |
+| `random_2.circom`                      | 2          | 12                | Pair of random values        |
+| `random_3.circom`                      | 3          | 13                | Testing (faster compilation) |
+| `random_4.circom`                      | 4          | 13                | Small batches                |
+| `random_5.circom` - `random_14.circom` | 5-14       | 14                | Medium batches               |
+| `random_15.circom`                     | 15         | 15                | Production (library default) |
+
+> ⚠️ **Important**: The `numOutputs` parameter in your orchestrator/code **must match** the circuit's configured outputs. Mismatches will cause proof generation to fail.
+
+#### Generating Circuit Files
+
+Circuit files can be regenerated using the included script:
+
+\`\`\`bash
+# Generate all circuits (1-15)
+npm run generate-circuits:all
+
+# Generate specific circuits
+node scripts/generate-circuits.js 3 5 10
+\`\`\`
+
+#### Choosing the Right Circuit
+
+- **For testing/development**: Use `random_3.circom` with `power: 13` for faster compilation (~10s vs ~60s)
+- **For production**: Use `random_15.circom` with `power: 15` for maximum random outputs
+- **For specific needs**: Choose the circuit that matches your exact `numOutputs` requirement
 
 The circuit uses `PoseidonEx` to generate multiple hash outputs efficiently. For `numOutputs > 4`, dummy zero inputs are added to satisfy `PoseidonEx` constraints (`t = nInputs + 1` must be `>= numOutputs`).
 
@@ -60,6 +84,32 @@ cargo install --path circom
 npm install -g snarkjs@^0.7
 \`\`\`
 
+### Recommended: Use Pre-Prepared Powers of Tau Files
+
+For production use, it's **strongly recommended** to use pre-prepared Phase 2 Powers of Tau files from trusted ceremonies rather than generating your own. These files have been created with contributions from many participants and include a random beacon, making them much more secure.
+
+**Available sources:**
+
+1. **snarkjs repository** (recommended for most users):
+   - https://github.com/iden3/snarkjs?tab=readme-ov-file#7-prepare-phase-2
+   - Files: `powersOfTau28_hez_final_XX.ptau` (where XX is the power)
+
+2. **Perpetual Powers of Tau** (Ethereum community ceremony with 54 contributions):
+   - https://github.com/privacy-ethereum/perpetualpowersoftau?tab=readme-ov-file#prepared-and-truncated-files
+   - More contributions = stronger security guarantees
+
+**Example usage with pre-prepared files:**
+
+\`\`\`bash
+# Download a prepared ptau file (e.g., power 15 for production)
+curl -O https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_15.ptau
+
+# Rename to match expected format
+mv powersOfTau28_hez_final_15.ptau pot15_final.ptau
+\`\`\`
+
+> 💡 **Why use prepared files?** The security of Groth16 proofs depends on the "toxic waste" from the Powers of Tau ceremony being destroyed. Pre-prepared files from multi-party ceremonies ensure that as long as at least one participant was honest, the ceremony is secure.
+
 ### Install RandomGen
 
 \`\`\`bash
@@ -83,9 +133,13 @@ const { RandomCircuitOrchestrator } = require('randomgen');
 
 async function generateRandomProof() {
   // Create orchestrator instance with all configuration
+  // ⚠️ IMPORTANT: numOutputs MUST match the circuit file you're using!
+  //    - circuitName: 'random_15' → numOutputs: 15
+  //    - circuitName: 'random_3'  → numOutputs: 3
+  //    - circuitName: 'random_N'  → numOutputs: N
   const orchestrator = new RandomCircuitOrchestrator({
-    circuitName: 'random',      // Uses random.circom with 15 outputs
-    numOutputs: 15,             // Must match circuit's numOutputs
+    circuitName: 'random_15',   // Uses random_15.circom (15 outputs)
+    numOutputs: 15,             // Must match circuit's numOutputs!
     power: 15,                  // Powers of tau (2^15 constraints)
     ptauEntropy: 'my-ptau-entropy',    // Entropy for ptau ceremony
     setupEntropy: 'my-setup-entropy',  // Entropy for zkey ceremony
@@ -159,7 +213,7 @@ async function setupCircuit() {
   // Complete setup with all required parameters
   // Only regenerates missing artifacts (smart caching)
   await setup.completeSetup('random', {
-    circuitPath: 'circuits/random.circom',
+    circuitPath: 'circuits/random_15.circom',
     power: 15,
     ptauName: 'pot15_final.ptau',
     ptauEntropy: 'my-ptau-entropy',    // Required for ptau ceremony
@@ -172,7 +226,7 @@ async function manualSetup() {
   // Compile circuit (both parameters required)
   const { r1csPath, wasmPath } = await setup.compileCircuit(
     'random',
-    'circuits/random.circom'
+    'circuits/random_15.circom'
   );
 
   // Generate powers of tau (all parameters required)
@@ -210,14 +264,16 @@ new RandomCircuitOrchestrator(options)
 
 | Option         | Type   | Default                   | Description                                 |
 | -------------- | ------ | ------------------------- | ------------------------------------------- |
-| `circuitName`  | string | `"random"`                | Circuit name: 'random' or 'random_test'     |
-| `numOutputs`   | number | `15`                      | Number of hash outputs (must match circuit) |
+| `circuitName`  | string | `"random_15"`             | Circuit name: `random_1` to `random_15`     |
+| `numOutputs`   | number | `15`                      | Number of outputs (**must match circuit!**) |
 | `power`        | number | `15`                      | Powers of tau (2^power constraints)         |
 | `ptauName`     | string | `"pot{power}_final.ptau"` | PTAU filename                               |
 | `ptauEntropy`  | string | timestamp-based           | Entropy for ptau contribution               |
 | `setupEntropy` | string | timestamp-based           | Entropy for zkey contribution               |
 | `buildDir`     | string | `"./build"`               | Build directory path                        |
 | `circuitDir`   | string | `"./circuits"`            | Circuit directory path                      |
+
+> ⚠️ **Critical**: `circuitName` and `numOutputs` must be consistent. If using `random_5.circom`, set `numOutputs: 5`.
 
 #### Methods
 
@@ -347,7 +403,7 @@ const circuitInputs = utils.createCircuitInputs({
 Generates a Groth16 proof. Both parameters are required.
 
 \`\`\`javascript
-const { proof, publicSignals } = await utils.generateProof(inputs, "random");
+const { proof, publicSignals } = await utils.generateProof(inputs, "random_15");
 \`\`\`
 
 #### `verifyProof(vkey, proof, publicSignals)`
@@ -382,7 +438,7 @@ Executes complete workflow: create inputs → generate proof → verify.
 Both parameters are required.
 
 \`\`\`javascript
-const result = await utils.fullWorkflow(inputs, "random");
+const result = await utils.fullWorkflow(inputs, "random_15");
 // Returns: { inputs, proof, publicSignals, isValid }
 \`\`\`
 
@@ -396,7 +452,7 @@ Orchestrates complete setup workflow with smart caching (only regenerates missin
 
 \`\`\`javascript
 await setup.completeSetup('random', {
-  circuitPath: 'circuits/random.circom',  // Required
+  circuitPath: 'circuits/random_15.circom',  // Required
   power: 15,                               // Required
   ptauName: 'pot15_final.ptau',           // Required
   ptauEntropy: 'my-ptau-entropy',         // Required
@@ -411,7 +467,7 @@ Compiles Circom circuit to R1CS and WASM. Both parameters are required.
 \`\`\`javascript
 const { r1csPath, wasmPath } = await setup.compileCircuit(
   'random',
-  'circuits/random.circom'
+  'circuits/random_15.circom'
 );
 \`\`\`
 
@@ -456,8 +512,8 @@ randomgen/
 ├── README.md                # This file
 ├── jest.config.cjs          # Jest configuration for tests
 ├── circuits/
-│   ├── random.circom        # Production circuit (15 outputs)
-│   ├── random_test.circom   # Test circuit (3 outputs, faster)
+│   ├── random_15.circom        # Production circuit (15 outputs)
+│   ├── random_3.circom   # Test circuit (3 outputs, faster)
 │   ├── random_template.circom # Shared circuit template
 │   └── circomlib/           # Circom library dependencies
 ├── lib/
@@ -465,7 +521,7 @@ randomgen/
 │   ├── orchestrator.js      # High-level orchestrator
 │   └── setupArtifacts.js    # Setup and compilation utilities
 ├── tests/
-│   ├── random.test.cjs      # Circuit tests (uses random_test.circom)
+│   ├── random.test.cjs      # Circuit tests (uses random_3.circom)
 │   ├── utils.test.cjs       # Utils function tests
 │   ├── orchestrator.test.cjs # Orchestrator tests
 │   └── setupArtifacts.test.cjs # Setup utility tests
@@ -501,11 +557,11 @@ npm run test:watch
 Test coverage includes:
 - Unit tests for all utility functions
 - Orchestrator class tests
-- Circuit validation tests (using `random_test.circom` with 3 outputs)
+- Circuit validation tests (using `random_3.circom` with 3 outputs)
 - Integration tests for complete workflows
 - Edge cases and error handling
 
-**Note**: Tests use `random_test.circom` (3 outputs, power=13) for faster execution.
+**Note**: Tests use `random_3.circom` (3 outputs, power=13) for faster execution.
 
 ## Example Use Cases
 
@@ -702,7 +758,7 @@ async function customCircuitWorkflow() {
   // =========================================================================
   // STEP 1: Manual setup (useful for custom circuits or CI/CD pipelines)
   // =========================================================================
-  const circuitName = 'random_test';  // Use test circuit for this example
+  const circuitName = 'random_3.circom';  // Use test circuit for this example
   const circuitPath = path.join(__dirname, 'circuits', `${circuitName}.circom`);
 
   console.log('Compiling circuit...');
@@ -750,7 +806,7 @@ async function customCircuitWorkflow() {
   // STEP 4: Extract random outputs from public signals
   // =========================================================================
   // Public signals format: [R[0], R[1], R[2], blockHash, userNonce, N]
-  // For random_test circuit with 3 outputs:
+  // For random_3.circom circuit with 3 outputs:
   const numOutputs = 3;
   const R = publicSignals.slice(0, numOutputs);
   console.log('\nRandom outputs R:', R);
@@ -772,7 +828,7 @@ async function batchProofGeneration() {
   // Initialize once, generate many proofs
   // =========================================================================
   const orchestrator = new RandomCircuitOrchestrator({
-    circuitName: 'random_test',  // Faster for demo
+    circuitName: 'random_3.circom',  // Faster for demo
     numOutputs: 3,
     power: 13,
     ptauEntropy: 'batch-ptau',
@@ -874,7 +930,7 @@ Ensure:
 - **Subsequent runs**: Near-instant (artifacts are cached)
 - **Proof generation**: ~1-2 seconds per proof
 - **Proof verification**: ~100-200ms per proof
-- **Test circuit**: Use `random_test.circom` for faster development
+- **Test circuit**: Use `random_3.circom` for faster development
 
 ## Related Resources
 

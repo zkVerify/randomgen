@@ -8,11 +8,11 @@ const { c } = require("circom_tester");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_test.circom which is configured with:
+// Tests use random_3.circom which is configured with:
 //   - numOutputs = 3 (smaller for faster tests)
 //   - power = 13 (ptau file size)
 // 
-// The production circuit (random.circom) uses:
+// The production circuit (random_15.circom) uses:
 //   - numOutputs = 15 (library default)
 //   - power = 15 (ptau file size)
 // =============================================================================
@@ -44,7 +44,7 @@ describe("Random Circuit Test Suite", () => {
 
     // Load and compile the random circuit
     circuit = await wasm_tester(
-      path.join(__dirname, "../circuits/random_test.circom")
+      path.join(__dirname, "../circuits/random_3.circom")
     );
   });
 

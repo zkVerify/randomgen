@@ -7,7 +7,7 @@
  * 3. Verify the proof
  * 4. Save and load proof data
  * 
- * The production circuit (random.circom) generates 15 random outputs per proof.
+ * The production circuit (random_15.circom) generates 15 random outputs per proof.
  * Each output R[i] is computed as: PoseidonEx(...)[i] mod N
  * 
  * Usage:
@@ -60,8 +60,8 @@ async function main() {
     log("Creating orchestrator instance...", "blue");
     // All configuration is set in the constructor
     const orchestrator = new RandomCircuitOrchestrator({
-      circuitName: "random",
-      circuitPath: path.join(__dirname, "../circuits/random.circom"),
+      circuitName: "random_15",
+      circuitPath: path.join(__dirname, "../circuits/random_15.circom"),
       numOutputs: NUM_OUTPUTS,
       power: 15,
       // https://github.com/privacy-ethereum/perpetualpowersoftau

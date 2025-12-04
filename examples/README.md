@@ -198,9 +198,9 @@ const path = require("path");
 async function customCircuit() {
   // All configuration is set in constructor
   const orchestrator = new RandomCircuitOrchestrator({
-    circuitName: "random",
+    circuitName: "random_15",
     buildDir: "/custom/build/path",
-    circuitPath: path.join(__dirname, "circuits/random.circom"),
+    circuitPath: path.join(__dirname, "circuits/random_15.circom"),
     numOutputs: 15,
     power: 12,
     ptauName: "pot12_final.ptau",
@@ -236,7 +236,7 @@ async function lowLevel() {
   console.log("Random:", random);
   
   // Compile and setup custom circuit - all parameters required
-  const { r1csPath, wasmPath } = await setup.compileCircuit("random", "circuits/random.circom");
+  const { r1csPath, wasmPath } = await setup.compileCircuit("random_15", "circuits/random_15.circom");
   console.log("R1CS:", r1csPath);
   console.log("WASM:", wasmPath);
 }
@@ -273,7 +273,7 @@ The examples automatically generate artifacts on first run. If they fail:
 cd /home/danielecker/hl-crypto/randomgen
 npm run build
 # or
-node -e "const {setup} = require('./index'); setup.completeSetup('random', { circuitPath: 'circuits/random.circom', power: 15, ptauName: 'pot15_final.ptau' });"
+node -e "const {setup} = require('./index'); setup.completeSetup('random', { circuitPath: 'circuits/random_15.circom', power: 15, ptauName: 'pot15_final.ptau' });"
 ```
 
 ### "Proof verification failed"

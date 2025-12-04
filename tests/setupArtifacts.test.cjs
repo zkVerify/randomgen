@@ -87,13 +87,13 @@ describe("SetupArtifacts Module - Complete Function Coverage", () => {
         });
 
         it("should throw if circuitPath not provided", async () => {
-            await expect(compileCircuit("random_test")).rejects.toThrow("circuitPath is required");
+            await expect(compileCircuit("random_3")).rejects.toThrow("circuitPath is required");
         });
 
         it("should compile circuit with explicit parameters", async () => {
-            const circuitPath = path.join(circuitDir, "random_test.circom");
+            const circuitPath = path.join(circuitDir, "random_3.circom");
 
-            const result = await compileCircuit("random_test", circuitPath);
+            const result = await compileCircuit("random_3", circuitPath);
             expect(result.r1csPath).toBeDefined();
             expect(result.wasmPath).toBeDefined();
             expect(typeof result.r1csPath).toBe("string");
@@ -159,7 +159,7 @@ const TEST_SETUP_ENTROPY = "0xabcd";
 
 // ===== SETUP GROTH16 TESTS =====
 describe("setupGroth16()", () => {
-    const TEST_CIRCUIT_NAME = "random_test";
+    const TEST_CIRCUIT_NAME = "random_3";
     const TEST_POWER = 13;
 
     beforeAll(async () => {
@@ -234,38 +234,38 @@ describe("completeSetup()", () => {
     });
 
     it("should throw if options not provided", async () => {
-        await expect(completeSetup("random_test")).rejects.toThrow("options object is required");
+        await expect(completeSetup("random_3")).rejects.toThrow("options object is required");
     });
 
     it("should throw if circuitPath not provided", async () => {
-        await expect(completeSetup("random_test", { power: 13, ptauName: "pot13_final.ptau" })).rejects.toThrow("options.circuitPath is required");
+        await expect(completeSetup("random_3", { power: 13, ptauName: "pot13_final.ptau" })).rejects.toThrow("options.circuitPath is required");
     });
 
     it("should throw if power not provided", async () => {
-        await expect(completeSetup("random_test", {
-            circuitPath: path.join(circuitDir, "random_test.circom"),
+        await expect(completeSetup("random_3", {
+            circuitPath: path.join(circuitDir, "random_3"),
             ptauName: "pot13_final.ptau",
         })).rejects.toThrow("options.power is required");
     });
 
     it("should throw if ptauName not provided", async () => {
-        await expect(completeSetup("random_test", {
-            circuitPath: path.join(circuitDir, "random_test.circom"),
+        await expect(completeSetup("random_3", {
+            circuitPath: path.join(circuitDir, "random_3"),
             power: 13,
         })).rejects.toThrow("options.ptauName is required");
     });
 
     it("should throw if ptau entropy not provided", async () => {
-        await expect(completeSetup("random_test", {
-            circuitPath: path.join(circuitDir, "random_test.circom"),
+        await expect(completeSetup("random_3", {
+            circuitPath: path.join(circuitDir, "random_3"),
             power: 13,
             ptauName: "pot13_final.ptau",
         })).rejects.toThrow("options.ptauEntropy is required");
     });
 
     it("should throw if groth16 entropy not provided", async () => {
-        await expect(completeSetup("random_test", {
-            circuitPath: path.join(circuitDir, "random_test.circom"),
+        await expect(completeSetup("random_3", {
+            circuitPath: path.join(circuitDir, "random_3"),
             power: 13,
             ptauName: "pot13_final.ptau",
             ptauEntropy: "0x1234",
@@ -273,8 +273,8 @@ describe("completeSetup()", () => {
     });
 
     it("should execute complete setup workflow", async () => {
-        const result = await completeSetup("random_test", {
-            circuitPath: path.join(circuitDir, "random_test.circom"),
+        const result = await completeSetup("random_3", {
+            circuitPath: path.join(circuitDir, "random_3.circom"),
             power: 13,
             ptauName: "pot13_final.ptau",
             ptauEntropy: TEST_PTAU_ENTROPY,

@@ -11,7 +11,7 @@ const buildDir = path.join(rootDir, "build");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_test.circom which is configured with:
+// Tests use random_3.circom which is configured with:
 //   - numOutputs = 3 (smaller for faster tests)
 //   - power = 13 (ptau file size)
 // 
@@ -21,7 +21,7 @@ const buildDir = path.join(rootDir, "build");
 // =============================================================================
 const NUM_OUTPUTS = 3;
 const TEST_POWER = 13;
-const TEST_CIRCUIT_NAME = "random_test";
+const TEST_CIRCUIT_NAME = "random_3";
 
 /**
  * Cleans up test artifacts: build directory and generated ptau files
@@ -48,7 +48,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     describe("RandomCircuitOrchestrator - Constructor", () => {
         it("should create orchestrator with default options", () => {
             const orch = new RandomCircuitOrchestrator();
-            expect(orch.circuitName).toBe("random");
+            expect(orch.circuitName).toBe("random_15");
             expect(orch.numOutputs).toBe(15);
             expect(orch.power).toBe(15);
             expect(orch.vkey).toBeNull();
@@ -95,9 +95,9 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
         it("should compute circuitPath from circuitDir and circuitName", () => {
             const orch = new RandomCircuitOrchestrator({
-                circuitName: "random_test",
+                circuitName: "random_3",
             });
-            expect(orch.circuitPath).toContain("random_test.circom");
+            expect(orch.circuitPath).toContain("random_3");
         });
 
         it("should set default ptauEntropy with timestamp", () => {
@@ -417,7 +417,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     describe("verifyRandomProof()", () => {
         beforeAll(async () => {
             orchestrator = new RandomCircuitOrchestrator({
-                circuitName: "random_test",
+                circuitName: "random_3",
                 numOutputs: NUM_OUTPUTS,
                 power: TEST_POWER,
             });
@@ -455,7 +455,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             };
 
             const orchestrator = new RandomCircuitOrchestrator({
-                circuitName: "random_test",
+                circuitName: "random_3",
                 numOutputs: NUM_OUTPUTS,
                 power: TEST_POWER,
             });
@@ -484,7 +484,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     describe("Integration Tests", () => {
 
         it("should work with multiple orchestrator instances", () => {
-            const orch1 = new RandomCircuitOrchestrator({ circuitName: "random" });
+            const orch1 = new RandomCircuitOrchestrator({ circuitName: "random_15" });
             const orch2 = new RandomCircuitOrchestrator({ circuitName: "custom" });
 
             const val1 = orch1.validateBuildArtifacts();

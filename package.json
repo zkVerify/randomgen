@@ -16,7 +16,9 @@
   "license": "ISC",
   "scripts": {
     "test": "jest --forceExit --detectOpenHandles",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "generate-circuits": "node scripts/generate-circuits.js",
+    "generate-circuits:all": "node scripts/generate-circuits.js"
   },
   "files": [
     "index.js",

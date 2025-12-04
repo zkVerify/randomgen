@@ -5,8 +5,8 @@
  * for a Poseidon-based random number generator using Groth16.
  * 
  * The circuit generates multiple random numbers per proof:
- * - random.circom: 15 outputs (production default, power=15)
- * - random_test.circom: 3 outputs (testing, power=13)
+ * - random_15.circom: 15 outputs (production default, power=15)
+ * - random_3.circom: 3 outputs (testing, power=13)
  * 
  * Main exports:
  * - RandomCircuitOrchestrator: High-level orchestrator for the complete workflow
