@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const {
     computePoseidonHash,
-    generateRandomFromSeed,
+    computePermutation,
     createCircuitInputs,
     getWasmPath,
     getFinalZkeyPath,
@@ -11,8 +11,8 @@ const {
     loadVerificationKey,
     fullWorkflow,
 } = require("../lib/utils.js");
-
 const { completeSetup } = require("../lib/setupArtifacts.js");
+const { computeLocalRandomNumbers } = require("../lib/orchestrator.js");
 
 const rootDir = path.resolve(__dirname, "..");
 const buildDir = path.join(rootDir, "build");
@@ -20,17 +20,15 @@ const buildDir = path.join(rootDir, "build");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_3.circom which is configured with:
-//   - numOutputs = 3 (smaller for faster tests)
-//   - power = 13 (ptau file size)
-// 
-// The production circuit (random_15.circom) uses:
-//   - numOutputs = 15 (library default)
-//   - power = 15 (ptau file size)
+// Tests use random_5_35.circom which is configured with:
+//   - numOutputs = 5
+//   - maxOutputVal = 35
+//   - power = 13
 // =============================================================================
-const TEST_CIRCUIT_NAME = "random_3";
+const TEST_CIRCUIT_NAME = "random_5_35";
 const TEST_POWER = 13;
-const NUM_OUTPUTS = 3;
+const NUM_OUTPUTS = 5;
+const MAX_OUTPUT_VAL = 35;
 const TEST_PTAU_ENTROPY = "0x1234";
 const TEST_SETUP_ENTROPY = "0xabcd";
 
@@ -53,9 +51,9 @@ function cleanupTestArtifacts() {
     }
 }
 
-// Helper to extract R outputs from publicSignals
-// publicSignals format: [R[0], R[1], ..., R[numOutputs-1], blockHash, userNonce, N]
-const extractROutputs = (publicSignals, numOutputs = NUM_OUTPUTS) => {
+// Helper to extract randomNumbers from publicSignals
+// publicSignals format: [randomNumbers[0], randomNumbers[1], ..., randomNumbers[numOutputs-1]]
+const extractOutputs = (publicSignals, numOutputs = NUM_OUTPUTS) => {
     return publicSignals.slice(0, numOutputs).map(r => BigInt(r));
 };
 
@@ -75,8 +73,6 @@ describe("Utils Module - Complete Function Coverage", () => {
         circuitInputs = createCircuitInputs({
             blockHash: 12345,
             userNonce: 67890,
-            kurierEntropy: 54321,
-            N: 1000,
         });
         vkey = loadVerificationKey("verification_key.json");
     }, 300000);
@@ -87,254 +83,197 @@ describe("Utils Module - Complete Function Coverage", () => {
 
     // ===== POSEIDON HASH TESTS =====
     describe("computePoseidonHash()", () => {
-        it("should throw if nOuts is not provided", async () => {
-            await expect(computePoseidonHash(1, 2, 3)).rejects.toThrow("nOuts is required");
+        it("should throw if blockHash is not provided", async () => {
+            await expect(computePoseidonHash(undefined, 2)).rejects.toThrow("blockHash is required");
         });
 
-        it("should return an array with single output", async () => {
-            const hashes = await computePoseidonHash(1, 2, 3, 1);
-            expect(Array.isArray(hashes)).toBe(true);
-            expect(hashes.length).toBe(1);
-            expect(typeof hashes[0]).toBe("bigint");
+        it("should throw if userNonce is not provided", async () => {
+            await expect(computePoseidonHash(1, undefined)).rejects.toThrow("userNonce is required");
+        });
+
+        it("should return a BigInt", async () => {
+            const hash = await computePoseidonHash(1, 2);
+            expect(typeof hash).toBe("bigint");
         });
 
         it("should compute consistent Poseidon hash for same inputs", async () => {
-            const hash1 = await computePoseidonHash(1, 2, 3, 1);
-            const hash2 = await computePoseidonHash(1, 2, 3, 1);
+            const hash1 = await computePoseidonHash(1, 2);
+            const hash2 = await computePoseidonHash(1, 2);
             expect(hash1).toEqual(hash2);
         });
 
         it("should produce different hashes for different inputs", async () => {
-            const hash1 = await computePoseidonHash(1, 2, 3, 1);
-            const hash2 = await computePoseidonHash(1, 2, 4, 1);
-            expect(hash1[0]).not.toEqual(hash2[0]);
+            const hash1 = await computePoseidonHash(1, 2);
+            const hash2 = await computePoseidonHash(1, 3);
+            expect(hash1).not.toEqual(hash2);
         });
 
         it("should accept string and number inputs", async () => {
-            const hash1 = await computePoseidonHash("100", "200", "300", 1);
-            const hash2 = await computePoseidonHash(BigInt(100), BigInt(200), BigInt(300), 1);
+            const hash1 = await computePoseidonHash("100", "200");
+            const hash2 = await computePoseidonHash(BigInt(100), BigInt(200));
             expect(hash1).toEqual(hash2);
         });
 
         it("should handle zero inputs", async () => {
-            const hashes = await computePoseidonHash(0, 0, 0, 1);
-            expect(hashes).toBeDefined();
-            expect(Array.isArray(hashes)).toBe(true);
-            expect(typeof hashes[0]).toBe("bigint");
+            const hash = await computePoseidonHash(0, 0);
+            expect(hash).toBeDefined();
+            expect(typeof hash).toBe("bigint");
         });
 
         it("should handle large numbers", async () => {
             const largeNum = BigInt("12345678901234567890123456789012345678901234567890");
-            const hashes = await computePoseidonHash(largeNum, 1, 1, 1);
-            expect(hashes).toBeDefined();
-            expect(Array.isArray(hashes)).toBe(true);
-            expect(hashes[0]).toBeGreaterThan(0n);
+            const hash = await computePoseidonHash(largeNum, 1);
+            expect(hash).toBeDefined();
+            expect(typeof hash).toBe("bigint");
+            expect(hash).toBeGreaterThan(0n);
         });
 
         it("should be deterministic across multiple calls", async () => {
             const results = [];
             for (let i = 0; i < 5; i++) {
-                results.push(await computePoseidonHash(100, 200, 300, 1));
+                results.push(await computePoseidonHash(100, 200));
             }
-            const firstHash = results[0][0];
-            results.forEach(r => expect(r[0]).toEqual(firstHash));
-        });
-
-        it("should return multiple outputs when nOuts > 1", async () => {
-            const hashes = await computePoseidonHash(1, 2, 3, 5);
-            expect(Array.isArray(hashes)).toBe(true);
-            expect(hashes.length).toBe(5);
-            hashes.forEach(h => expect(typeof h).toBe("bigint"));
-        });
-
-        it("should return different values for each output", async () => {
-            const hashes = await computePoseidonHash(1, 2, 3, 5);
-            const unique = new Set(hashes.map(h => h.toString()));
-            // At least some outputs should be different
-            expect(unique.size).toBeGreaterThan(1);
-        });
-
-        it("should produce consistent multi-output results", async () => {
-            const hashes1 = await computePoseidonHash(100, 200, 300, 3);
-            const hashes2 = await computePoseidonHash(100, 200, 300, 3);
-            expect(hashes1).toEqual(hashes2);
+            const firstHash = results[0];
+            results.forEach(r => expect(r).toEqual(firstHash));
         });
     });
 
-    // ===== RANDOM FROM SEED TESTS =====
-    describe("generateRandomFromSeed()", () => {
-        it("should throw if N is not provided", () => {
-            expect(() => generateRandomFromSeed(5000n)).toThrow("N is required");
+    // ===== PERMUTATION TESTS =====
+    describe("computePermutation()", () => {
+        it("should throw if n > 50", () => {
+            expect(() => computePermutation(12345n, 51)).toThrow("n must be <= 50");
         });
 
-        it("should generate random number from single seed", () => {
-            const seed = BigInt(5000);
-            const random = generateRandomFromSeed(seed, 1000n);
-            expect(Array.isArray(random)).toBe(true);
-            expect(random.length).toBe(1);
-            expect(random[0]).toEqual(BigInt(0)); // 5000 % 1000 = 0
-            expect(random[0]).toBeLessThan(BigInt(1000));
+        it("should return array of length n", () => {
+            const permuted = computePermutation(12345n, 10);
+            expect(Array.isArray(permuted)).toBe(true);
+            expect(permuted.length).toBe(10);
         });
 
-        it("should generate random numbers from array of seeds", () => {
-            const seeds = [BigInt(5000), BigInt(5001), BigInt(5002)];
-            const N = BigInt(1000);
-            const randoms = generateRandomFromSeed(seeds, N);
-            expect(Array.isArray(randoms)).toBe(true);
-            expect(randoms.length).toBe(3);
-            expect(randoms[0]).toEqual(BigInt(0));   // 5000 % 1000 = 0
-            expect(randoms[1]).toEqual(BigInt(1));   // 5001 % 1000 = 1
-            expect(randoms[2]).toEqual(BigInt(2));   // 5002 % 1000 = 2
+        it("should return values from 1 to n", () => {
+            const permuted = computePermutation(12345n, 10);
+            const sorted = [...permuted].sort((a, b) => a - b);
+            expect(sorted).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         });
 
-        it("should handle string and number inputs", () => {
-            const random1 = generateRandomFromSeed("1000", "100");
-            const random2 = generateRandomFromSeed(1000n, 100n);
-            expect(random1).toEqual(random2);
+        it("should return unique values (permutation property)", () => {
+            const permuted = computePermutation(99999n, 50);
+            const unique = new Set(permuted);
+            expect(unique.size).toBe(50);
         });
 
-        it("should produce remainder of seed mod N", () => {
-            const seed = BigInt(555);
-            const N = BigInt(100);
-            const random = generateRandomFromSeed(seed, N);
-            expect(random[0]).toEqual(BigInt(55));
+        it("should be deterministic for same seed", () => {
+            const perm1 = computePermutation(12345n, 20);
+            const perm2 = computePermutation(12345n, 20);
+            expect(perm1).toEqual(perm2);
         });
 
-        it("should return 0 when seed is multiple of N", () => {
-            const seed = BigInt(1000);
-            const N = BigInt(100);
-            const random = generateRandomFromSeed(seed, N);
-            expect(random[0]).toEqual(BigInt(0));
+        it("should produce different permutations for different seeds", () => {
+            const perm1 = computePermutation(12345n, 20);
+            const perm2 = computePermutation(54321n, 20);
+            expect(perm1).not.toEqual(perm2);
         });
 
-        it("should handle large N values", () => {
-            const seed = BigInt(12345);
-            const N = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
-            const random = generateRandomFromSeed(seed, N);
-            expect(random[0]).toBeLessThan(N);
+        it("should handle n = 1", () => {
+            const permuted = computePermutation(12345n, 1);
+            expect(permuted).toEqual([1]);
         });
 
-        it("should always return results in range [0, N)", () => {
-            const N = BigInt(10000);
-            const seeds = Array.from({ length: 20 }, () =>
-                BigInt(Math.floor(Math.random() * 1000000))
-            );
-            const randoms = generateRandomFromSeed(seeds, N);
-            expect(randoms.length).toBe(20);
-            randoms.forEach(r => {
-                expect(r).toBeGreaterThanOrEqual(0n);
-                expect(r).toBeLessThan(N);
-            });
+        it("should handle seed = 0", () => {
+            const permuted = computePermutation(0n, 10);
+            expect(permuted.length).toBe(10);
+            const sorted = [...permuted].sort((a, b) => a - b);
+            expect(sorted).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         });
 
-        it("should work with Poseidon hash outputs", async () => {
-            const hashes = await computePoseidonHash(100, 200, 300, NUM_OUTPUTS);
-            const N = BigInt(1000);
-            const randoms = generateRandomFromSeed(hashes, N);
-            expect(randoms.length).toBe(NUM_OUTPUTS);
-            randoms.forEach((r, i) => {
-                expect(r).toEqual(hashes[i] % N);
-                expect(r).toBeGreaterThanOrEqual(0n);
-                expect(r).toBeLessThan(N);
+        it("should produce fair distribution over many trials", async () => {
+            // Count how often each position contains value 1
+            const counts = Array(10).fill(0);
+            for (let i = 0; i < 1000; i++) {
+                const permuted = await computeLocalRandomNumbers({ blockHash: BigInt(i), userNonce: BigInt(i+1) }, 10, 10);
+                const pos = permuted.randomNumbers.indexOf(1);
+                counts[pos]++;
+            }
+            // Each position should have roughly 100 occurrences (±50 for randomness)
+            counts.forEach(c => {
+                expect(c).toBeGreaterThan(50);
+                expect(c).toBeLessThan(150);
             });
         });
     });
 
     // ===== CREATE CIRCUIT INPUTS TESTS =====
     describe("createCircuitInputs()", () => {
-        it("should throw if N is not provided", async () => {
+        it("should throw if blockHash is not provided", () => {
             const inputs = {
-                blockHash: 123,
                 userNonce: 456,
-                kurierEntropy: 789,
             };
-            expect(() => createCircuitInputs(inputs)).toThrow("inputs.N is required");
+            expect(() => createCircuitInputs(inputs)).toThrow("inputs.blockHash is required");
         });
 
-        it("should create circuit inputs with all required fields", async () => {
+        it("should throw if userNonce is not provided", () => {
+            const inputs = {
+                blockHash: 123,
+            };
+            expect(() => createCircuitInputs(inputs)).toThrow("inputs.userNonce is required");
+        });
+
+        it("should create circuit inputs with required fields", () => {
             const inputs = {
                 blockHash: 123,
                 userNonce: 456,
-                kurierEntropy: 789,
-                N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
             expect(circuitInputs.blockHash).toBeDefined();
             expect(circuitInputs.userNonce).toBeDefined();
-            expect(circuitInputs.kurierEntropy).toBeDefined();
-            expect(circuitInputs.N).toBeDefined();
         });
 
-        it("should convert all inputs to strings", async () => {
+        it("should convert all inputs to strings", () => {
             const inputs = {
                 blockHash: 123,
                 userNonce: 456,
-                kurierEntropy: 789,
-                N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
             expect(typeof circuitInputs.blockHash).toBe("string");
             expect(typeof circuitInputs.userNonce).toBe("string");
-            expect(typeof circuitInputs.kurierEntropy).toBe("string");
-            expect(typeof circuitInputs.N).toBe("string");
         });
 
-        it("should accept hex string for blockHash", async () => {
+        it("should accept hex string for blockHash", () => {
             const inputs = {
                 blockHash: "0x7b",
                 userNonce: 100,
-                kurierEntropy: 200,
-                N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
             expect(circuitInputs.blockHash).toBe("123");
         });
 
-        it("should create consistent inputs for same data", async () => {
+        it("should create consistent inputs for same data", () => {
             const inputs = {
                 blockHash: 555,
                 userNonce: 666,
-                kurierEntropy: 777,
-                N: 2000,
             };
             const result1 = createCircuitInputs(inputs);
             const result2 = createCircuitInputs(inputs);
             expect(result1).toEqual(result2);
         });
 
-        it("should handle all zero inputs", async () => {
+        it("should handle all zero inputs", () => {
             const inputs = {
                 blockHash: 0,
                 userNonce: 0,
-                kurierEntropy: 0,
-                N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
             expect(circuitInputs).toBeDefined();
         });
 
-        it("should handle large input values", async () => {
+        it("should handle large input values", () => {
             const largeNum = "123456789012345678901234567890";
             const inputs = {
                 blockHash: largeNum,
                 userNonce: largeNum,
-                kurierEntropy: largeNum,
-                N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
             expect(circuitInputs).toBeDefined();
-        });
-
-        it("should respect different N values", async () => {
-            const baseInputs = {
-                blockHash: 100,
-                userNonce: 200,
-                kurierEntropy: 300,
-            };
-            const result1 = createCircuitInputs({ ...baseInputs, N: 100 });
-            const result2 = createCircuitInputs({ ...baseInputs, N: 10000 });
-            expect(result1).toBeDefined();
-            expect(result2).toBeDefined();
         });
     });
 
@@ -346,10 +285,10 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should return correct wasm path with circuit name", () => {
-            const wasmPath = getWasmPath("random_15");
+            const wasmPath = getWasmPath("random_6_50");
             expect(wasmPath).toContain("build");
-            expect(wasmPath).toContain("random_15_js");
-            expect(wasmPath).toContain("random_15.wasm");
+            expect(wasmPath).toContain("random_6_50_js");
+            expect(wasmPath).toContain("random_6_50.wasm");
         });
 
         it("should return correct wasm path with custom circuit name", () => {
@@ -359,9 +298,9 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should return correct zkey path with circuit name", () => {
-            const zkeyPath = getFinalZkeyPath("random_15");
+            const zkeyPath = getFinalZkeyPath("random_6_50");
             expect(zkeyPath).toContain("build");
-            expect(zkeyPath).toContain("random_15_final.zkey");
+            expect(zkeyPath).toContain("random_6_50_final.zkey");
         });
 
         it("should return correct zkey path with custom circuit name", () => {
@@ -370,8 +309,8 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should generate absolute paths", () => {
-            const wasmPath = getWasmPath("random_15");
-            const zkeyPath = getFinalZkeyPath("random_15");
+            const wasmPath = getWasmPath("random_6_50");
+            const zkeyPath = getFinalZkeyPath("random_6_50");
             expect(path.isAbsolute(wasmPath)).toBe(true);
             expect(path.isAbsolute(zkeyPath)).toBe(true);
         });
@@ -422,12 +361,29 @@ describe("Utils Module - Complete Function Coverage", () => {
             const isValid = await verifyProof(vkey, tamperedProof, publicSignals);
             expect(isValid).toBe(false);
         }, 60000);
+
+        it("should produce outputs in range [1, maxOutputVal]", async () => {
+            const { publicSignals } = await generateProof(circuitInputs, TEST_CIRCUIT_NAME);
+            const outputs = extractOutputs(publicSignals);
+
+            for (const output of outputs) {
+                expect(output).toBeGreaterThanOrEqual(BigInt(1));
+                expect(output).toBeLessThanOrEqual(BigInt(MAX_OUTPUT_VAL));
+            }
+        }, 60000);
+
+        it("should produce unique outputs (permutation guarantee)", async () => {
+            const { publicSignals } = await generateProof(circuitInputs, TEST_CIRCUIT_NAME);
+            const outputs = extractOutputs(publicSignals);
+            const unique = new Set(outputs.map(o => o.toString()));
+            expect(unique.size).toBe(NUM_OUTPUTS);
+        }, 60000);
     });
 
     // ===== FULL WORKFLOW TEST =====
     describe("fullWorkflow()", () => {
         it("should throw if circuitName not provided", async () => {
-            await expect(fullWorkflow({ blockHash: 1, userNonce: 2, kurierEntropy: 3, N: 1000 })).rejects.toThrow("circuitName is required");
+            await expect(fullWorkflow({ blockHash: 1, userNonce: 2 })).rejects.toThrow("circuitName is required");
         });
 
         it("should execute complete workflow if artifacts exist", async () => {
@@ -441,8 +397,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 99999,
                 userNonce: 88888,
-                kurierEntropy: 77777,
-                N: 1000,
             };
 
             const result = await fullWorkflow(inputs, TEST_CIRCUIT_NAME);
@@ -454,106 +408,47 @@ describe("Utils Module - Complete Function Coverage", () => {
         }, 60000);
     });
 
-    // ===== N AS PUBLIC INPUT - SAME SETUP, DIFFERENT N VALUES =====
-    describe("N as Public Input - Same setup works for different N values", () => {
-        it("should generate and verify proofs with different N values using same setup", async () => {
-            const baseInputs = {
+    // ===== PERMUTATION-BASED OUTPUT VERIFICATION =====
+    describe("Permutation-based outputs", () => {
+        it("should match local Poseidon + permutation computation", async () => {
+            const inputs = {
                 blockHash: 12345,
                 userNonce: 67890,
-                kurierEntropy: 54321,
             };
+            const circuitInputs = createCircuitInputs(inputs);
 
-            const nValues = [100, 500, 1000, 5000, 10000];
+            const { publicSignals } = await generateProof(circuitInputs, TEST_CIRCUIT_NAME);
+            const circuitOutputs = extractOutputs(publicSignals);
 
-            for (const N of nValues) {
-                const circuitInputs = createCircuitInputs({
-                    ...baseInputs,
-                    N,
-                });
+            // Compute locally
+            const seed = await computePoseidonHash(inputs.blockHash, inputs.userNonce);
+            const permuted = computePermutation(seed, MAX_OUTPUT_VAL);
+            const expectedOutputs = permuted.slice(0, NUM_OUTPUTS);
 
-                const { proof, publicSignals } = await generateProof(circuitInputs, TEST_CIRCUIT_NAME);
-                expect(proof).toBeDefined();
-                expect(publicSignals).toBeDefined();
-
-                // Verify the proof with the SAME verification key
-                const isValid = await verifyProof(vkey, proof, publicSignals);
-                expect(isValid).toBe(true);
-
-                // Verify all R outputs are in valid range [0, N)
-                const rOutputs = extractROutputs(publicSignals);
-                expect(rOutputs.length).toBe(NUM_OUTPUTS);
-                for (const R of rOutputs) {
-                    expect(R).toBeGreaterThanOrEqual(BigInt(0));
-                    expect(R).toBeLessThan(BigInt(N));
-                }
-            }
-        }, 120000);
-
-        it("should produce correct R[i] = hash[i] mod N for different N values", async () => {
-            const baseInputs = {
-                blockHash: 99999,
-                userNonce: 88888,
-                kurierEntropy: 77777,
-            };
-
-            // Get the underlying hashes (NUM_OUTPUTS outputs to match circuit)
-            const hashes = await computePoseidonHash(
-                baseInputs.blockHash,
-                baseInputs.userNonce,
-                baseInputs.kurierEntropy,
-                NUM_OUTPUTS
-            );
-
-            const nValues = [100, 1000, 10000, 100000];
-
-            for (const N of nValues) {
-                const circuitInputs = createCircuitInputs({
-                    ...baseInputs,
-                    N,
-                });
-
-                const { proof, publicSignals } = await generateProof(circuitInputs, TEST_CIRCUIT_NAME);
-                const isValid = await verifyProof(vkey, proof, publicSignals);
-                expect(isValid).toBe(true);
-
-                // Verify each R[i] = hash[i] mod N
-                const rOutputs = extractROutputs(publicSignals);
-                for (let i = 0; i < NUM_OUTPUTS; i++) {
-                    const expectedR = hashes[i] % BigInt(N);
-                    expect(rOutputs[i]).toEqual(expectedR);
-                }
-            }
-        }, 120000);
-
-        it("should handle large N values", async () => {
-            const largeN = BigInt("1000000000000000000000"); // 10^21
-
-            const circuitInputs = createCircuitInputs({
-                blockHash: 12345,
-                userNonce: 67890,
-                kurierEntropy: 54321,
-                N: largeN,
-            });
-
-            const { proof, publicSignals } = await generateProof(circuitInputs, TEST_CIRCUIT_NAME);
-            const isValid = await verifyProof(vkey, proof, publicSignals);
-            expect(isValid).toBe(true);
-
-            // Verify all R outputs are in valid range [0, largeN)
-            const rOutputs = extractROutputs(publicSignals);
-            expect(rOutputs.length).toBe(NUM_OUTPUTS);
-            for (const R of rOutputs) {
-                expect(R).toBeGreaterThanOrEqual(BigInt(0));
-                expect(R).toBeLessThan(largeN);
+            for (let i = 0; i < NUM_OUTPUTS; i++) {
+                expect(circuitOutputs[i].toString()).toEqual(expectedOutputs[i].toString());
             }
         }, 60000);
 
-        it("should verify that same inputs with same N produce same proof result", async () => {
+        it("should produce different outputs for different inputs", async () => {
+            const inputs1 = createCircuitInputs({ blockHash: 11111, userNonce: 22222 });
+            const inputs2 = createCircuitInputs({ blockHash: 33333, userNonce: 44444 });
+
+            const result1 = await generateProof(inputs1, TEST_CIRCUIT_NAME);
+            const result2 = await generateProof(inputs2, TEST_CIRCUIT_NAME);
+
+            const outputs1 = extractOutputs(result1.publicSignals);
+            const outputs2 = extractOutputs(result2.publicSignals);
+
+            // At least one output should differ
+            const allSame = outputs1.every((o, i) => o === outputs2[i]);
+            expect(allSame).toBe(false);
+        }, 120000);
+
+        it("should verify that same inputs produce same outputs", async () => {
             const inputs = {
                 blockHash: 77777,
                 userNonce: 88888,
-                kurierEntropy: 99999,
-                N: 1000,
             };
 
             const circuitInputs1 = createCircuitInputs(inputs);
@@ -562,7 +457,7 @@ describe("Utils Module - Complete Function Coverage", () => {
             const result1 = await generateProof(circuitInputs1, TEST_CIRCUIT_NAME);
             const result2 = await generateProof(circuitInputs2, TEST_CIRCUIT_NAME);
 
-            // Public signals (including R) should be identical
+            // Public signals should be identical
             expect(result1.publicSignals).toEqual(result2.publicSignals);
 
             // Both proofs should be valid
