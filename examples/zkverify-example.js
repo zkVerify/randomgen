@@ -62,7 +62,8 @@ function section(title) {
 
 // Circuit configuration
 const NUM_OUTPUTS = 5;
-const MAX_OUTPUT_VAL = 35;
+const POOL_SIZE = 35;
+const START_VALUE = 1;
 
 async function main() {
   try {
@@ -75,10 +76,11 @@ async function main() {
 
     log("Creating orchestrator instance...", "blue");
     const orchestrator = new RandomCircuitOrchestrator({
-      circuitName: "random_5_35",
-      circuitPath: path.join(__dirname, "../circuits/random_5_35.circom"),
+      circuitName: "random_5_35_1",
+      circuitPath: path.join(__dirname, "../circuits/random_5_35_1.circom"),
       numOutputs: NUM_OUTPUTS,
-      maxOutputVal: MAX_OUTPUT_VAL,
+      poolSize: POOL_SIZE,
+      startValue: START_VALUE,
       power: 13,
       ptauName: "ppot_0080_13.ptau",
       setupEntropy: "zkverify-example-entropy",
@@ -106,7 +108,7 @@ async function main() {
     const proofResult = await orchestrator.generateRandomProof(inputs);
 
     log("✓ Proof generated successfully", "green");
-    log(`  Random numbers (unique values in [1, ${MAX_OUTPUT_VAL}]):`, "bright");
+    log(`  Random numbers (unique values in [${START_VALUE}, ${START_VALUE + POOL_SIZE - 1}]):`, "bright");
     proofResult.randomNumbers.forEach((r, i) => {
       log(`    [${i}]: ${r}`, "bright");
     });

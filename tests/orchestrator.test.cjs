@@ -11,15 +11,17 @@ const buildDir = path.join(rootDir, "build");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_5_35.circom which is configured with:
+// Tests use random_5_35_1.circom which is configured with:
 //   - numOutputs = 5
-//   - maxOutputVal = 35
+//   - poolSize = 35
+//   - startValue = 1
 //   - power = 13
 // =============================================================================
 const NUM_OUTPUTS = 5;
-const MAX_OUTPUT_VAL = 35;
+const POOL_SIZE = 35;
+const START_VALUE = 1;
 const TEST_POWER = 13;
-const TEST_CIRCUIT_NAME = "random_5_35";
+const TEST_CIRCUIT_NAME = "random_5_35_1";
 
 /**
  * Cleans up test artifacts: build directory and generated ptau files
@@ -46,9 +48,10 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     describe("RandomCircuitOrchestrator - Constructor", () => {
         it("should create orchestrator with default options", () => {
             const orch = new RandomCircuitOrchestrator();
-            expect(orch.circuitName).toBe("random_5_35");
+            expect(orch.circuitName).toBe("random_5_35_1");
             expect(orch.numOutputs).toBe(5);
-            expect(orch.maxOutputVal).toBe(35);
+            expect(orch.poolSize).toBe(35);
+            expect(orch.startValue).toBe(1);
             expect(orch.power).toBe(13);
             expect(orch.vkey).toBeNull();
             expect(orch.ptauEntropy).toContain("random-entropy-ptau-");
@@ -71,11 +74,11 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             expect(orch.numOutputs).toBe(5);
         });
 
-        it("should create orchestrator with custom maxOutputVal", () => {
+        it("should create orchestrator with custom poolSize", () => {
             const orch = new RandomCircuitOrchestrator({
-                maxOutputVal: 45,
+                poolSize: 45,
             });
-            expect(orch.maxOutputVal).toBe(45);
+            expect(orch.poolSize).toBe(45);
         });
 
         it("should create orchestrator with custom power", () => {
@@ -139,7 +142,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             orchestrator = new RandomCircuitOrchestrator({
                 circuitName: TEST_CIRCUIT_NAME,
                 numOutputs: NUM_OUTPUTS,
-                maxOutputVal: MAX_OUTPUT_VAL,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
                 power: TEST_POWER,
             });
         });
@@ -204,7 +208,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             orchestrator = new RandomCircuitOrchestrator({
                 circuitName: TEST_CIRCUIT_NAME,
                 numOutputs: NUM_OUTPUTS,
-                maxOutputVal: MAX_OUTPUT_VAL,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
                 power: TEST_POWER,
             });
         });
@@ -233,7 +238,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
     // ===== COMPUTE LOCAL RANDOM NUMBERS TESTS =====
     describe("computeLocalRandomNumbers()", () => {
-        it("should compute local random numbers with default maxOutputVal", async () => {
+        it("should compute local random numbers with default poolSize", async () => {
             const inputs = {
                 blockHash: 100,
                 userNonce: 200,
@@ -245,16 +250,16 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
         });
 
-        it("should compute local random numbers with custom maxOutputVal", async () => {
+        it("should compute local random numbers with custom poolSize and startValue", async () => {
             const inputs = {
                 blockHash: 100,
                 userNonce: 200,
             };
-            const result = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, 30);
+            const result = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, 30, 0);
             expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
             for (const r of result.randomNumbers) {
-                expect(r).toBeGreaterThanOrEqual(1);
-                expect(r).toBeLessThanOrEqual(30);
+                expect(r).toBeGreaterThanOrEqual(0);
+                expect(r).toBeLessThanOrEqual(29);
             }
         });
 
@@ -263,7 +268,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 blockHash: 50,
                 userNonce: 100,
             };
-            const result = await computeLocalRandomNumbers(inputs, 10, MAX_OUTPUT_VAL);
+            const result = await computeLocalRandomNumbers(inputs, 10, POOL_SIZE, START_VALUE);
             const unique = new Set(result.randomNumbers);
             expect(unique.size).toBe(10);
         });
@@ -294,9 +299,9 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             expect(result1.seed).not.toEqual(result2.seed);
         });
 
-        it("should throw if numOutputs > maxOutputVal", async () => {
+        it("should throw if numOutputs > poolSize", async () => {
             const inputs = { blockHash: 100, userNonce: 200 };
-            await expect(computeLocalRandomNumbers(inputs, 60, 50)).rejects.toThrow("numOutputs must be <= maxOutputVal");
+            await expect(computeLocalRandomNumbers(inputs, 60, 50)).rejects.toThrow("numOutputs must be <= poolSize");
         });
 
         it("should throw if numOutputs is not provided", async () => {
@@ -401,7 +406,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             orchestrator = new RandomCircuitOrchestrator({
                 circuitName: TEST_CIRCUIT_NAME,
                 numOutputs: NUM_OUTPUTS,
-                maxOutputVal: MAX_OUTPUT_VAL,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
                 power: TEST_POWER,
             });
             await orchestrator.initialize();
@@ -438,7 +444,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const orchestrator = new RandomCircuitOrchestrator({
                 circuitName: TEST_CIRCUIT_NAME,
                 numOutputs: NUM_OUTPUTS,
-                maxOutputVal: MAX_OUTPUT_VAL,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
                 power: TEST_POWER,
             });
 
@@ -452,10 +459,10 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             expect(Array.isArray(result.randomNumbers)).toBe(true);
             expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
 
-            // All random numbers should be in range [1, maxOutputVal]
+            // All random numbers should be in range [startValue, startValue + poolSize - 1]
             for (const r of result.randomNumbers) {
-                expect(BigInt(r)).toBeGreaterThanOrEqual(1n);
-                expect(BigInt(r)).toBeLessThanOrEqual(BigInt(MAX_OUTPUT_VAL));
+                expect(BigInt(r)).toBeGreaterThanOrEqual(BigInt(START_VALUE));
+                expect(BigInt(r)).toBeLessThanOrEqual(BigInt(START_VALUE + POOL_SIZE - 1));
             }
 
             // All random numbers should be unique (permutation guarantee)
@@ -484,7 +491,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const orchestrator = new RandomCircuitOrchestrator({
                 circuitName: TEST_CIRCUIT_NAME,
                 numOutputs: NUM_OUTPUTS,
-                maxOutputVal: MAX_OUTPUT_VAL,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
                 power: TEST_POWER,
             });
 
@@ -494,7 +502,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             };
 
             const circuitResult = await orchestrator.generateRandomProof(inputs);
-            const localResult = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, MAX_OUTPUT_VAL);
+            const localResult = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, POOL_SIZE, START_VALUE);
 
             // Circuit and local computation should match
             for (let i = 0; i < NUM_OUTPUTS; i++) {

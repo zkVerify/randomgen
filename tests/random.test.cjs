@@ -8,13 +8,15 @@ const { computePermutation } = require("../lib/utils.js");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_5_35.circom which is configured with:
+// Tests use random_5_35_1.circom which is configured with:
 //   - numOutputs = 5
-//   - maxOutputVal = 35
+//   - poolSize = 35
+//   - startValue = 1
 //   - power = 13
 // =============================================================================
 const NUM_OUTPUTS = 5;
-const MAX_OUTPUT_VAL = 35;
+const POOL_SIZE = 35;
+const START_VALUE = 1;
 
 // Helper function to compute SHA256 of input and convert to decimal
 // Returns a 32-byte hash as a decimal string for circuit compatibility
@@ -45,7 +47,7 @@ describe("Random Circuit Test Suite", () => {
 
     // Load and compile the random circuit
     circuit = await wasm_tester(
-      path.join(__dirname, "../circuits/random_5_35.circom")
+      path.join(__dirname, "../circuits/random_5_35_1.circom")
     );
   });
 
@@ -82,8 +84,8 @@ describe("Random Circuit Test Suite", () => {
 
       expect(outputs.length).toBe(NUM_OUTPUTS);
       for (let i = 0; i < NUM_OUTPUTS; i++) {
-        expect(outputs[i]).toBeGreaterThanOrEqual(BigInt(1));
-        expect(outputs[i]).toBeLessThanOrEqual(BigInt(MAX_OUTPUT_VAL));
+        expect(outputs[i]).toBeGreaterThanOrEqual(BigInt(START_VALUE));
+        expect(outputs[i]).toBeLessThanOrEqual(BigInt(START_VALUE + POOL_SIZE - 1));
       }
     });
 
@@ -98,8 +100,8 @@ describe("Random Circuit Test Suite", () => {
 
       const outputs = extractOutputs(w);
       for (const output of outputs) {
-        expect(output).toBeGreaterThanOrEqual(BigInt(1));
-        expect(output).toBeLessThanOrEqual(BigInt(MAX_OUTPUT_VAL));
+        expect(output).toBeGreaterThanOrEqual(BigInt(START_VALUE));
+        expect(output).toBeLessThanOrEqual(BigInt(START_VALUE + POOL_SIZE - 1));
       }
     });
 
@@ -176,7 +178,7 @@ describe("Random Circuit Test Suite", () => {
       const circuitOutputs = extractOutputs(w);
 
       // Calculate locally using orchestrator
-      const localResult = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, MAX_OUTPUT_VAL);
+      const localResult = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, POOL_SIZE, START_VALUE);
 
       for (let i = 0; i < NUM_OUTPUTS; i++) {
         expect(circuitOutputs[i].toString()).toEqual(localResult.randomNumbers[i].toString());
@@ -199,7 +201,7 @@ describe("Random Circuit Test Suite", () => {
       const seed = BigInt(F.toString(hashResult));
 
       // Compute permutation locally
-      const permuted = computePermutation(seed, MAX_OUTPUT_VAL);
+      const permuted = computePermutation(seed, POOL_SIZE, START_VALUE);
       const expectedOutputs = permuted.slice(0, NUM_OUTPUTS);
 
       for (let i = 0; i < NUM_OUTPUTS; i++) {
@@ -227,8 +229,8 @@ describe("Random Circuit Test Suite", () => {
 
         const outputs = extractOutputs(w);
         for (const output of outputs) {
-          expect(output).toBeGreaterThanOrEqual(BigInt(1));
-          expect(output).toBeLessThanOrEqual(BigInt(MAX_OUTPUT_VAL));
+          expect(output).toBeGreaterThanOrEqual(BigInt(START_VALUE));
+          expect(output).toBeLessThanOrEqual(BigInt(START_VALUE + POOL_SIZE - 1));
         }
       }
     });
@@ -250,12 +252,12 @@ describe("Random Circuit Test Suite", () => {
 
       const outputs = extractOutputs(w);
       for (const output of outputs) {
-        expect(output).toBeGreaterThanOrEqual(BigInt(1));
-        expect(output).toBeLessThanOrEqual(BigInt(MAX_OUTPUT_VAL));
+        expect(output).toBeGreaterThanOrEqual(BigInt(START_VALUE));
+        expect(output).toBeLessThanOrEqual(BigInt(START_VALUE + POOL_SIZE - 1));
       }
     });
 
-    it("Should produce minimum value (1) in some output", async () => {
+    it("Should produce minimum value (startValue) in some output", async () => {
       // Find inputs that produce output = 1 for at least one output
       let found = false;
       for (let i = 0; i < 1000 && !found; i++) {
@@ -267,7 +269,7 @@ describe("Random Circuit Test Suite", () => {
         const w = await circuit.calculateWitness(inputs, true);
         const outputs = extractOutputs(w);
 
-        if (outputs.some(o => o === BigInt(1))) {
+        if (outputs.some(o => o === BigInt(START_VALUE))) {
           found = true;
           await circuit.checkConstraints(w);
         }
@@ -275,7 +277,7 @@ describe("Random Circuit Test Suite", () => {
       expect(found).toBe(true);
     });
 
-    it("Should produce maximum value (maxOutputVal) in some output", async () => {
+    it("Should produce maximum value (startValue + poolSize - 1) in some output", async () => {
       // Find inputs that produce output = maxOutputVal for at least one output
       let found = false;
       for (let i = 0; i < 1000 && !found; i++) {
@@ -287,7 +289,7 @@ describe("Random Circuit Test Suite", () => {
         const w = await circuit.calculateWitness(inputs, true);
         const outputs = extractOutputs(w);
 
-        if (outputs.some(o => o === BigInt(MAX_OUTPUT_VAL))) {
+        if (outputs.some(o => o === BigInt(START_VALUE + POOL_SIZE - 1))) {
           found = true;
           await circuit.checkConstraints(w);
         }
@@ -308,8 +310,8 @@ describe("Random Circuit Test Suite", () => {
 
         const outputs = extractOutputs(w);
         for (const output of outputs) {
-          expect(output).toBeGreaterThanOrEqual(BigInt(1));
-          expect(output).toBeLessThanOrEqual(BigInt(MAX_OUTPUT_VAL));
+          expect(output).toBeGreaterThanOrEqual(BigInt(START_VALUE));
+          expect(output).toBeLessThanOrEqual(BigInt(START_VALUE + POOL_SIZE - 1));
         }
 
         // Verify uniqueness (permutation guarantee)
@@ -461,10 +463,10 @@ describe("Random Circuit Test Suite", () => {
         const outputs = extractOutputs(w);
 
         for (const output of outputs) {
-          // Must be >= 1 (natural number)
-          expect(output).toBeGreaterThanOrEqual(BigInt(1));
-          // Must be <= maxOutputVal
-          expect(output).toBeLessThanOrEqual(BigInt(MAX_OUTPUT_VAL));
+          // Must be >= startValue
+          expect(output).toBeGreaterThanOrEqual(BigInt(START_VALUE));
+          // Must be <= startValue + poolSize - 1
+          expect(output).toBeLessThanOrEqual(BigInt(START_VALUE + POOL_SIZE - 1));
         }
       }
     });
@@ -487,9 +489,9 @@ describe("Random Circuit Test Suite", () => {
         }
       }
 
-      // Should see outputs across a good portion of the range [1, 50]
-      // With 500 * 3 = 1500 outputs, we should see most values
-      expect(allOutputs.size).toBeGreaterThan(MAX_OUTPUT_VAL * 0.8);
+      // Should see outputs across a good portion of the range
+      // With 500 * NUM_OUTPUTS outputs, we should see most values
+      expect(allOutputs.size).toBeGreaterThan(POOL_SIZE * 0.8);
     });
   });
 });

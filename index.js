@@ -7,10 +7,10 @@
  * The circuit generates unique random numbers via permutation:
  * - Uses Poseidon(2) hash of (blockHash, userNonce) as seed
  * - Applies Fisher-Yates permutation to generate unique outputs
- * - Output values are in range [1, maxOutputVal]
+ * - Output values are in contiguous range [startValue, startValue + poolSize - 1]
  * 
- * Circuit naming convention: random_{numOutputs}_{maxOutputVal}.circom
- * Example: random_6_49.circom for 6 unique numbers from 1-49
+ * Circuit naming convention: random_{numOutputs}_{poolSize}_{startValue}.circom
+ * Example: random_6_49_1.circom for 6 unique numbers from 1-49
  * 
  * Main exports:
  * - RandomCircuitOrchestrator: High-level orchestrator for the complete workflow
@@ -30,7 +30,7 @@
  *   userNonce: 7,
  * });
  * 
- * console.log(result.randomNumbers); // Array of unique random values in [1, maxOutputVal]
+ * console.log(result.randomNumbers); // Array of unique random values in [startValue, startValue+poolSize-1]
  */
 
 const { RandomCircuitOrchestrator, computeLocalRandomNumbers } = require("./lib/orchestrator");

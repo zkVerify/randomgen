@@ -9,7 +9,7 @@
  * 5. Proof tampering detection
  * 
  * The circuit uses Poseidon(2) hash with blockHash and userNonce as inputs,
- * then RandomPermutate to generate unique shuffled numbers from 1 to maxOutputVal.
+ * then RandomPermutate to generate unique shuffled numbers from a contiguous range.
  * 
  * Usage:
  *   node examples/advanced-example.js [scenario]
@@ -38,7 +38,8 @@ const colors = {
 };
 
 const NUM_OUTPUTS = 5;      // Number of random outputs to generate
-const MAX_OUTPUT_VAL = 35;  // Maximum value in range [1, maxOutputVal]
+const POOL_SIZE = 35;       // Size of the value pool to shuffle
+const START_VALUE = 1;      // First value in range
 
 function log(message, color = "reset") {
   console.log(`${colors[color]}${message}${colors.reset}`);
@@ -58,10 +59,11 @@ async function exampleCustomConfig() {
   log("Creating orchestrator with custom settings...", "blue");
   // All configuration is set in the constructor
   const customOrchestrator = new RandomCircuitOrchestrator({
-    circuitName: "random_5_35",
+    circuitName: "random_5_35_1",
     buildDir: path.join(__dirname, "../build"),
     numOutputs: NUM_OUTPUTS,
-    maxOutputVal: MAX_OUTPUT_VAL,
+    poolSize: POOL_SIZE,
+    startValue: START_VALUE,
     // https://github.com/privacy-ethereum/perpetualpowersoftau
     ptauName: "ppot_0080_13.ptau",
     setupEntropy: "advanced-example-setup-entropy",
@@ -91,7 +93,8 @@ async function exampleErrorHandling() {
   try {
     const orchestrator = new RandomCircuitOrchestrator({
       numOutputs: NUM_OUTPUTS,
-      maxOutputVal: MAX_OUTPUT_VAL,
+      poolSize: POOL_SIZE,
+      startValue: START_VALUE,
       power: 13,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
       ptauName: "ppot_0080_13.ptau",
@@ -164,10 +167,10 @@ async function exampleLowLevel() {
 
   // Test 3: Unique values check
   log("\nTest 3: Permutation uniqueness", "blue");
-  const permuted = utils.computePermutation(12345n, MAX_OUTPUT_VAL);
+  const permuted = utils.computePermutation(12345n, POOL_SIZE, START_VALUE);
   const unique = new Set(permuted);
-  log(`Permuted ${MAX_OUTPUT_VAL} values: [${permuted.slice(0, 5).join(", ")}, ...]`, "dim");
-  log(`All unique: ${unique.size === MAX_OUTPUT_VAL}`, unique.size === MAX_OUTPUT_VAL ? "green" : "red");
+  log(`Permuted ${POOL_SIZE} values: [${permuted.slice(0, 5).join(", ")}, ...]`, "dim");
+  log(`All unique: ${unique.size === POOL_SIZE}`, unique.size === POOL_SIZE ? "green" : "red");
 
   // Test 4: Circuit inputs (only blockHash and userNonce now)
   log("\nTest 4: Create circuit inputs", "blue");
@@ -189,7 +192,8 @@ async function examplePerformance() {
     // All configuration in constructor
     const orchestrator = new RandomCircuitOrchestrator({
       numOutputs: NUM_OUTPUTS,
-      maxOutputVal: MAX_OUTPUT_VAL,
+      poolSize: POOL_SIZE,
+      startValue: START_VALUE,
       power: 13,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
       ptauName: "ppot_0080_13.ptau",
@@ -267,7 +271,8 @@ async function exampleTampering() {
     // All configuration in constructor
     const orchestrator = new RandomCircuitOrchestrator({
       numOutputs: NUM_OUTPUTS,
-      maxOutputVal: MAX_OUTPUT_VAL,
+      poolSize: POOL_SIZE,
+      startValue: START_VALUE,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
       ptauName: "ppot_0080_13.ptau",
       setupEntropy: "advanced-example-setup-entropy",

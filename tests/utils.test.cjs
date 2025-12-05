@@ -20,15 +20,17 @@ const buildDir = path.join(rootDir, "build");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_5_35.circom which is configured with:
+// Tests use random_5_35_1.circom which is configured with:
 //   - numOutputs = 5
-//   - maxOutputVal = 35
+//   - poolSize = 35
+//   - startValue = 1
 //   - power = 13
 // =============================================================================
-const TEST_CIRCUIT_NAME = "random_5_35";
+const TEST_CIRCUIT_NAME = "random_5_35_1";
 const TEST_POWER = 13;
 const NUM_OUTPUTS = 5;
-const MAX_OUTPUT_VAL = 35;
+const POOL_SIZE = 35;
+const START_VALUE = 1;
 const TEST_PTAU_ENTROPY = "0x1234";
 const TEST_SETUP_ENTROPY = "0xabcd";
 
@@ -140,17 +142,17 @@ describe("Utils Module - Complete Function Coverage", () => {
 
     // ===== PERMUTATION TESTS =====
     describe("computePermutation()", () => {
-        it("should throw if n > 50", () => {
-            expect(() => computePermutation(12345n, 51)).toThrow("n must be <= 50");
+        it("should throw if poolSize > 50", () => {
+            expect(() => computePermutation(12345n, 51)).toThrow("poolSize must be <= 50");
         });
 
-        it("should return array of length n", () => {
+        it("should return array of length poolSize", () => {
             const permuted = computePermutation(12345n, 10);
             expect(Array.isArray(permuted)).toBe(true);
             expect(permuted.length).toBe(10);
         });
 
-        it("should return values from 1 to n", () => {
+        it("should return values from 1 to poolSize", () => {
             const permuted = computePermutation(12345n, 10);
             const sorted = [...permuted].sort((a, b) => a - b);
             expect(sorted).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
@@ -174,7 +176,7 @@ describe("Utils Module - Complete Function Coverage", () => {
             expect(perm1).not.toEqual(perm2);
         });
 
-        it("should handle n = 1", () => {
+        it("should handle poolSize = 1", () => {
             const permuted = computePermutation(12345n, 1);
             expect(permuted).toEqual([1]);
         });
@@ -190,7 +192,7 @@ describe("Utils Module - Complete Function Coverage", () => {
             // Count how often each position contains value 1
             const counts = Array(10).fill(0);
             for (let i = 0; i < 1000; i++) {
-                const permuted = await computeLocalRandomNumbers({ blockHash: BigInt(i), userNonce: BigInt(i+1) }, 10, 10);
+                const permuted = await computeLocalRandomNumbers({ blockHash: BigInt(i), userNonce: BigInt(i + 1) }, 10, 10);
                 const pos = permuted.randomNumbers.indexOf(1);
                 counts[pos]++;
             }
@@ -362,13 +364,13 @@ describe("Utils Module - Complete Function Coverage", () => {
             expect(isValid).toBe(false);
         }, 60000);
 
-        it("should produce outputs in range [1, maxOutputVal]", async () => {
+        it("should produce outputs in range [startValue, startValue+poolSize-1]", async () => {
             const { publicSignals } = await generateProof(circuitInputs, TEST_CIRCUIT_NAME);
             const outputs = extractOutputs(publicSignals);
 
             for (const output of outputs) {
-                expect(output).toBeGreaterThanOrEqual(BigInt(1));
-                expect(output).toBeLessThanOrEqual(BigInt(MAX_OUTPUT_VAL));
+                expect(output).toBeGreaterThanOrEqual(BigInt(START_VALUE));
+                expect(output).toBeLessThanOrEqual(BigInt(START_VALUE + POOL_SIZE - 1));
             }
         }, 60000);
 
@@ -422,7 +424,7 @@ describe("Utils Module - Complete Function Coverage", () => {
 
             // Compute locally
             const seed = await computePoseidonHash(inputs.blockHash, inputs.userNonce);
-            const permuted = computePermutation(seed, MAX_OUTPUT_VAL);
+            const permuted = computePermutation(seed, POOL_SIZE, START_VALUE);
             const expectedOutputs = permuted.slice(0, NUM_OUTPUTS);
 
             for (let i = 0; i < NUM_OUTPUTS; i++) {

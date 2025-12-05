@@ -8,9 +8,9 @@
  * 4. Save and load proof data
  * 
  * The circuit uses Poseidon(2) hash with blockHash and userNonce as inputs,
- * then RandomPermutate to generate unique shuffled numbers from 1 to maxOutputVal.
+ * then RandomPermutate to generate unique shuffled numbers from a contiguous range.
  * 
- * Example: random_5_35.circom generates 5 unique numbers in range [1, 35]
+ * Example: random_5_35_1.circom generates 5 unique numbers in range [1, 35]
  * (like lottery numbers)
  * 
  * Usage:
@@ -50,7 +50,8 @@ function section(title) {
 }
 
 const NUM_OUTPUTS = 5;      // Number of random outputs to generate
-const MAX_OUTPUT_VAL = 35;  // Maximum value in range [1, maxOutputVal]
+const POOL_SIZE = 35;       // Size of the value pool to shuffle
+const START_VALUE = 1;      // First value in range [startValue, startValue+poolSize-1]
 
 async function main() {
   try {
@@ -64,10 +65,11 @@ async function main() {
     log("Creating orchestrator instance...", "blue");
     // All configuration is set in the constructor
     const orchestrator = new RandomCircuitOrchestrator({
-      circuitName: "random_5_35",
-      circuitPath: path.join(__dirname, "../circuits/random_5_35.circom"),
+      circuitName: "random_5_35_1",
+      circuitPath: path.join(__dirname, "../circuits/random_5_35_1.circom"),
       numOutputs: NUM_OUTPUTS,
-      maxOutputVal: MAX_OUTPUT_VAL,
+      poolSize: POOL_SIZE,
+      startValue: START_VALUE,
       power: 13,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
       ptauName: "ppot_0080_13.ptau",
@@ -97,7 +99,7 @@ async function main() {
     const proofResult = await orchestrator.generateRandomProof(inputs);
 
     log("✓ Proof generated successfully", "green");
-    log(`  Random numbers (unique values in [1, ${MAX_OUTPUT_VAL}]):`, "bright");
+    log(`  Random numbers (unique values in [${START_VALUE}, ${START_VALUE + POOL_SIZE - 1}]):`, "bright");
     proofResult.randomNumbers.forEach((r, i) => {
       log(`    [${i}]: ${r}`, "bright");
     });
@@ -174,7 +176,7 @@ async function main() {
     section("Step 6: Local Random Number Computation");
 
     log("Computing random numbers locally (Poseidon + Permutation)...", "blue");
-    const localResult = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, MAX_OUTPUT_VAL);
+    const localResult = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, POOL_SIZE, START_VALUE);
 
     log("✓ Local computation complete", "green");
     log(`  Poseidon seed: ${localResult.seed.substring(0, 40)}...`, "dim");
@@ -226,7 +228,7 @@ async function main() {
 
     log("\nCircuit Features:", "bright");
     log(`  - Generates ${NUM_OUTPUTS} unique random numbers per proof`, "dim");
-    log(`  - Output range: [1, ${MAX_OUTPUT_VAL}] (like lottery numbers)`, "dim");
+    log(`  - Output range: [${START_VALUE}, ${START_VALUE + POOL_SIZE - 1}] (like lottery numbers)`, "dim");
     log("  - Outputs are guaranteed unique (permutation-based)", "dim");
     log("  - Only 2 inputs: blockHash and userNonce (no private entropy)", "dim");
 

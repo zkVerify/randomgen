@@ -87,13 +87,13 @@ describe("SetupArtifacts Module - Complete Function Coverage", () => {
         });
 
         it("should throw if circuitPath not provided", async () => {
-            await expect(compileCircuit("random_5_35")).rejects.toThrow("circuitPath is required");
+            await expect(compileCircuit("random_5_35_1")).rejects.toThrow("circuitPath is required");
         });
 
         it("should compile circuit with explicit parameters", async () => {
-            const circuitPath = path.join(circuitDir, "random_5_35.circom");
+            const circuitPath = path.join(circuitDir, "random_5_35_1.circom");
 
-            const result = await compileCircuit("random_5_35", circuitPath);
+            const result = await compileCircuit("random_5_35_1", circuitPath);
             expect(result.r1csPath).toBeDefined();
             expect(result.wasmPath).toBeDefined();
             expect(typeof result.r1csPath).toBe("string");
@@ -159,7 +159,7 @@ const TEST_SETUP_ENTROPY = "0xabcd";
 
 // ===== SETUP GROTH16 TESTS =====
 describe("setupGroth16()", () => {
-    const TEST_CIRCUIT_NAME = "random_5_35";
+    const TEST_CIRCUIT_NAME = "random_5_35_1";
     const TEST_POWER = 13;
 
     beforeAll(async () => {
@@ -234,38 +234,38 @@ describe("completeSetup()", () => {
     });
 
     it("should throw if options not provided", async () => {
-        await expect(completeSetup("random_5_35")).rejects.toThrow("options object is required");
+        await expect(completeSetup("random_5_35_1")).rejects.toThrow("options object is required");
     });
 
     it("should throw if circuitPath not provided", async () => {
-        await expect(completeSetup("random_5_35", { power: 13, ptauName: "pot13_final.ptau" })).rejects.toThrow("options.circuitPath is required");
+        await expect(completeSetup("random_5_35_1", { power: 13, ptauName: "pot13_final.ptau" })).rejects.toThrow("options.circuitPath is required");
     });
 
     it("should throw if power not provided", async () => {
-        await expect(completeSetup("random_5_35", {
-            circuitPath: path.join(circuitDir, "random_5_35"),
+        await expect(completeSetup("random_5_35_1", {
+            circuitPath: path.join(circuitDir, "random_5_35_1"),
             ptauName: "pot13_final.ptau",
         })).rejects.toThrow("options.power is required");
     });
 
     it("should throw if ptauName not provided", async () => {
-        await expect(completeSetup("random_5_35", {
-            circuitPath: path.join(circuitDir, "random_5_35"),
+        await expect(completeSetup("random_5_35_1", {
+            circuitPath: path.join(circuitDir, "random_5_35_1"),
             power: 13,
         })).rejects.toThrow("options.ptauName is required");
     });
 
     it("should throw if ptau entropy not provided", async () => {
-        await expect(completeSetup("random_5_35", {
-            circuitPath: path.join(circuitDir, "random_5_35"),
+        await expect(completeSetup("random_5_35_1", {
+            circuitPath: path.join(circuitDir, "random_5_35_1"),
             power: 13,
             ptauName: "pot13_final.ptau",
         })).rejects.toThrow("options.ptauEntropy is required");
     });
 
     it("should throw if groth16 entropy not provided", async () => {
-        await expect(completeSetup("random_5_35", {
-            circuitPath: path.join(circuitDir, "random_5_35"),
+        await expect(completeSetup("random_5_35_1", {
+            circuitPath: path.join(circuitDir, "random_5_35_1"),
             power: 13,
             ptauName: "pot13_final.ptau",
             ptauEntropy: "0x1234",
@@ -273,8 +273,8 @@ describe("completeSetup()", () => {
     });
 
     it("should execute complete setup workflow", async () => {
-        const result = await completeSetup("random_5_35", {
-            circuitPath: path.join(circuitDir, "random_5_35.circom"),
+        const result = await completeSetup("random_5_35_1", {
+            circuitPath: path.join(circuitDir, "random_5_35_1.circom"),
             power: 13,
             ptauName: "pot13_final.ptau",
             ptauEntropy: TEST_PTAU_ENTROPY,
