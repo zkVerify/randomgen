@@ -3,7 +3,7 @@ const wasm_tester = require("circom_tester").wasm;
 const { buildPoseidon } = require("circomlibjs");
 const crypto = require("crypto");
 const { computeLocalRandomNumbers } = require("../lib/orchestrator.js");
-const { computePermutation } = require("../lib/utils.js");
+const { computePermutation, toFieldElement } = require("../lib/utils.js");
 
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
@@ -19,14 +19,18 @@ const POOL_SIZE = 35;
 const START_VALUE = 1;
 
 // Helper function to compute SHA256 of input and convert to decimal
-// Returns a 32-byte hash as a decimal string for circuit compatibility
+// Returns a truncated (31-byte) hash as a decimal string for circuit compatibility
+// This matches the truncation done by toFieldElement in utils.js
 const createBlockHash = (seed) => {
   // Create SHA256 hash of the seed
   const hash = crypto.createHash("sha256");
   hash.update(seed.toString());
-  const hashHex = hash.digest("hex"); // 64 hex characters = 32 bytes
-  // Convert hex string to decimal
-  return BigInt("0x" + hashHex).toString();
+  const hashBuffer = hash.digest(); // 32 bytes
+  // Take last 31 bytes to match toFieldElement truncation
+  const truncatedBuffer = hashBuffer.slice(hashBuffer.length - 31);
+  // Convert to BigInt (big-endian)
+  const truncatedValue = truncatedBuffer.reduce((acc, byte) => (acc << 8n) | BigInt(byte), 0n);
+  return truncatedValue.toString();
 };
 
 // Helper to extract randomNumbers array from witness (outputs start at index 1)

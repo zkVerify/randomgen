@@ -308,6 +308,39 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const inputs = { blockHash: 100, userNonce: 200 };
             await expect(computeLocalRandomNumbers(inputs)).rejects.toThrow("numOutputs is required");
         });
+
+        it("should accept Buffer inputs for blockHash", async () => {
+            const inputs = {
+                blockHash: Buffer.from([0x01, 0x02, 0x03, 0x04]),
+                userNonce: 200,
+            };
+            const result = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS);
+            expect(result.seed).toBeDefined();
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
+        });
+
+        it("should accept Uint8Array inputs for blockHash", async () => {
+            const inputs = {
+                blockHash: new Uint8Array([0x01, 0x02, 0x03, 0x04]),
+                userNonce: 200,
+            };
+            const result = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS);
+            expect(result.seed).toBeDefined();
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
+        });
+
+        it("should truncate 32-byte blockHash to 31 bytes", async () => {
+            // Two 32-byte values that differ only in first byte
+            const buf1 = Buffer.alloc(32, 0x00);
+            buf1[0] = 0xff;
+            const buf2 = Buffer.alloc(32, 0x00);
+            buf2[0] = 0x00;
+            // After truncation (last 31 bytes), they should produce same result
+            const result1 = await computeLocalRandomNumbers({ blockHash: buf1, userNonce: 1 }, NUM_OUTPUTS);
+            const result2 = await computeLocalRandomNumbers({ blockHash: buf2, userNonce: 1 }, NUM_OUTPUTS);
+            expect(result1.seed).toEqual(result2.seed);
+            expect(result1.randomNumbers).toEqual(result2.randomNumbers);
+        });
     });
 
     // ===== SAVE PROOF DATA TESTS =====
@@ -435,19 +468,28 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
     //===== GENERATE RANDOM PROOF TESTS =====
     describe("generateRandomProof()", () => {
-        it("should generate proof successfully with randomNumbers as array", async () => {
-            const inputs = {
-                blockHash: "12345",
-                userNonce: "67890",
-            };
+        let orchestrator;
 
-            const orchestrator = new RandomCircuitOrchestrator({
+        beforeAll(async () => {
+            orchestrator = new RandomCircuitOrchestrator({
                 circuitName: TEST_CIRCUIT_NAME,
                 numOutputs: NUM_OUTPUTS,
                 poolSize: POOL_SIZE,
                 startValue: START_VALUE,
                 power: TEST_POWER,
             });
+            await orchestrator.initialize();
+        }, 120000);
+
+        afterAll(() => {
+            cleanupTestArtifacts();
+        });
+
+        it("should generate proof successfully with randomNumbers as array", async () => {
+            const inputs = {
+                blockHash: "12345",
+                userNonce: "67890",
+            };
 
             const result = await orchestrator.generateRandomProof(inputs);
             expect(result.proof).toBeDefined();
@@ -469,7 +511,48 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const unique = new Set(result.randomNumbers);
             expect(unique.size).toBe(NUM_OUTPUTS);
 
-            cleanupTestArtifacts();
+        }, 120000);
+
+        it("should accept Buffer inputs for blockHash", async () => {
+            const inputs = {
+                blockHash: Buffer.from([0x01, 0x02, 0x03, 0x04, 0x05]),
+                userNonce: 67890,
+            };
+
+            const result = await orchestrator.generateRandomProof(inputs);
+            expect(result.proof).toBeDefined();
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
+        }, 120000);
+
+        it("should accept Uint8Array inputs for blockHash", async () => {
+            const inputs = {
+                blockHash: new Uint8Array([0x01, 0x02, 0x03, 0x04, 0x05]),
+                userNonce: 67890,
+            };
+
+            const result = await orchestrator.generateRandomProof(inputs);
+            expect(result.proof).toBeDefined();
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
+        }, 120000);
+
+        it("should truncate 32-byte blockHash to 31 bytes and match local computation", async () => {
+            // Two 32-byte values that differ only in first byte
+            const buf1 = Buffer.alloc(32, 0x00);
+            buf1[0] = 0xff;
+            const buf2 = Buffer.alloc(32, 0x00);
+            buf2[0] = 0x00;
+
+            const result1 = await orchestrator.generateRandomProof({ blockHash: buf1, userNonce: 1 });
+            const result2 = await orchestrator.generateRandomProof({ blockHash: buf2, userNonce: 1 });
+
+            // After truncation (last 31 bytes), they should produce same result
+            expect(result1.randomNumbers).toEqual(result2.randomNumbers);
+
+            // Verify circuit matches local computation
+            const localResult = await computeLocalRandomNumbers({ blockHash: buf1, userNonce: 1 }, NUM_OUTPUTS, POOL_SIZE, START_VALUE);
+            for (let i = 0; i < NUM_OUTPUTS; i++) {
+                expect(result1.randomNumbers[i]).toEqual(localResult.randomNumbers[i].toString());
+            }
         }, 120000);
     });
 

@@ -14,7 +14,7 @@ RandomGen provides a secure, verifiable way to generate unique random numbers us
 
 The circuit takes two public inputs and produces unique random numbers via permutation:
 
-- **Public inputs**: `blockHash`, `userNonce`
+- **Public inputs**: `blockHash`, `userNonce` (truncated to 31 bytes / 248 bits)
 - **Template parameters**: `numOutputs`, `poolSize`, `startValue`
 - **Output**: `randomNumbers[numOutputs]` = unique values in range [startValue, startValue + poolSize - 1]
 
@@ -28,6 +28,7 @@ The circuit uses:
 - All outputs are in range **[startValue, startValue + poolSize - 1]** (contiguous integers)
 - Output is deterministic based on inputs
 - Maximum `poolSize` is 50 (due to field size constraints)
+- Inputs are automatically **truncated to 31 bytes** (248 bits) to fit in BN254 field elements
 
 ### Circuit Variants
 
@@ -246,12 +247,21 @@ const validation = orchestrator.validateBuildArtifacts();
 
 Generates a complete ZK proof.
 
+**Note:** Inputs are automatically truncated to 31 bytes (248 bits) to fit in a field element.
+Accepts: BigInt, number, hex string (0x...), decimal string, Buffer, Uint8Array.
+
 ```javascript
 const result = await orchestrator.generateRandomProof({
   blockHash: 12345n,
   userNonce: 7,
 });
 // Returns: { proof, publicSignals, randomNumbers, circuitInputs }
+
+// Also works with 32-byte blockchain hashes
+const result2 = await orchestrator.generateRandomProof({
+  blockHash: Buffer.from('0x1234...', 'hex'), // auto-truncated to 31 bytes
+  userNonce: 7,
+});
 ```
 
 ##### `verifyRandomProof(proof, publicSignals)`
@@ -290,6 +300,9 @@ const { proof, publicSignals } = orchestrator.loadProofData(
 Computes the expected random numbers locally without generating a proof.
 Useful for testing and verification.
 
+**Note:** Inputs are automatically truncated to 31 bytes (248 bits) to fit in a field element.
+Accepts: BigInt, number, hex string (0x...), decimal string, Buffer, Uint8Array.
+
 ```javascript
 const { computeLocalRandomNumbers } = require('randomgen');
 
@@ -301,6 +314,12 @@ const result = await computeLocalRandomNumbers(
 );
 // Returns: { seed: '...', randomNumbers: [12, 35, 7, 49, 23, 1] }
 // randomNumbers = array of 6 unique numbers in [1, 49]
+
+// Also works with 32-byte blockchain hashes
+const result2 = await computeLocalRandomNumbers(
+  { blockHash: Buffer.from('0x1234...', 'hex'), userNonce: 7 },
+  6, 49, 1
+);
 ```
 
 ### Utils Functions
@@ -311,9 +330,38 @@ Core cryptographic and utility functions.
 
 Computes Poseidon hash of two inputs, returning a BigInt seed.
 
+**Note:** Inputs are automatically truncated to 31 bytes (248 bits) to fit in a BN254 field element.
+Accepts: BigInt, number, hex string (0x...), decimal string, Buffer, Uint8Array.
+
 ```javascript
 const seed = await utils.computePoseidonHash(12345n, 7n);
 // Returns: BigInt - the hash result
+
+// Also works with buffers (e.g., 32-byte blockchain hash)
+const blockHash = Buffer.from('0x1234...', 'hex'); // 32 bytes
+const seed2 = await utils.computePoseidonHash(blockHash, 7n);
+// blockHash is truncated to last 31 bytes automatically
+```
+
+#### `toFieldElement(value)`
+
+Converts various input types to a BigInt, truncating to 31 bytes (248 bits) to fit in a BN254 field element.
+Useful for pre-processing inputs before passing to circuit functions.
+
+Accepts: BigInt, number, hex string (0x...), decimal string, Buffer, Uint8Array.
+
+```javascript
+// Numbers and strings
+utils.toFieldElement(12345);        // 12345n
+utils.toFieldElement("0xff");       // 255n
+
+// Buffers (e.g., from blockchain)
+const blockHash = Buffer.from('abcd...', 'hex'); // 32 bytes
+utils.toFieldElement(blockHash);    // Truncated to last 31 bytes
+
+// Large values are truncated
+const large = (1n << 256n) - 1n;    // 256-bit value
+utils.toFieldElement(large);        // Truncated to 248 bits
 ```
 
 #### `computePermutation(seed, poolSize, startValue)`
@@ -334,12 +382,21 @@ const zeroIndexed = utils.computePermutation(seed, 10, 0);
 
 Creates properly formatted inputs for the circuit.
 
+**Note:** Inputs are automatically truncated to 31 bytes (248 bits) to fit in a field element.
+Accepts: BigInt, number, hex string (0x...), decimal string, Buffer, Uint8Array.
+
 ```javascript
 const circuitInputs = utils.createCircuitInputs({
   blockHash: 100,
   userNonce: 200,
 });
 // Returns: { blockHash: '100', userNonce: '200' }
+
+// Works with 32-byte blockchain hashes
+const circuitInputs2 = utils.createCircuitInputs({
+  blockHash: Buffer.from('0x1234...', 'hex'), // 32 bytes, auto-truncated
+  userNonce: 7,
+});
 ```
 
 #### `generateProof(inputs, circuitName)`

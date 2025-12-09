@@ -35,6 +35,7 @@
 
 const { RandomCircuitOrchestrator, computeLocalRandomNumbers } = require("./lib/orchestrator");
 const {
+  toFieldElement,
   computePoseidonHash,
   computePermutation,
   createCircuitInputs,
@@ -62,6 +63,7 @@ module.exports = {
 
   // Utils (low-level cryptographic functions)
   utils: {
+    toFieldElement,
     computePoseidonHash,
     computePermutation,
     createCircuitInputs,

@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const {
+    toFieldElement,
     computePoseidonHash,
     computePermutation,
     createCircuitInputs,
@@ -83,6 +84,70 @@ describe("Utils Module - Complete Function Coverage", () => {
         cleanupTestArtifacts();
     });
 
+    // ===== toFieldElement TESTS =====
+    describe("toFieldElement()", () => {
+        it("should convert number to BigInt", () => {
+            const result = toFieldElement(12345);
+            expect(typeof result).toBe("bigint");
+            expect(result).toBe(12345n);
+        });
+
+        it("should convert string to BigInt", () => {
+            const result = toFieldElement("12345");
+            expect(result).toBe(12345n);
+        });
+
+        it("should convert hex string to BigInt", () => {
+            const result = toFieldElement("0xff");
+            expect(result).toBe(255n);
+        });
+
+        it("should pass through BigInt unchanged (if under 31 bytes)", () => {
+            const result = toFieldElement(12345n);
+            expect(result).toBe(12345n);
+        });
+
+        it("should truncate BigInt larger than 31 bytes", () => {
+            // 32 bytes = 256 bits, create a value that's 256 bits
+            const largeValue = (1n << 256n) - 1n; // all 1s in 256 bits
+            const result = toFieldElement(largeValue);
+            // Should be truncated to 248 bits (31 bytes)
+            const expected = (1n << 248n) - 1n;
+            expect(result).toBe(expected);
+        });
+
+        it("should convert Buffer to BigInt", () => {
+            const buf = Buffer.from([0x01, 0x02, 0x03]);
+            const result = toFieldElement(buf);
+            expect(result).toBe(0x010203n);
+        });
+
+        it("should convert Uint8Array to BigInt", () => {
+            const arr = new Uint8Array([0x01, 0x02, 0x03]);
+            const result = toFieldElement(arr);
+            expect(result).toBe(0x010203n);
+        });
+
+        it("should truncate Buffer longer than 31 bytes (keep last 31)", () => {
+            // Create 32-byte buffer
+            const buf = Buffer.alloc(32);
+            buf[0] = 0xff; // first byte
+            buf[31] = 0x01; // last byte
+            const result = toFieldElement(buf);
+            // Should keep last 31 bytes (indices 1-31), so first byte is 0x00
+            // Result should have 0x01 in the last position
+            expect(result & 0xffn).toBe(0x01n);
+            // The high byte (index 0, which was 0xff) should be gone
+            expect(result >> 240n).toBe(0n); // top byte of 31-byte value
+        });
+
+        it("should handle zero", () => {
+            expect(toFieldElement(0)).toBe(0n);
+            expect(toFieldElement(0n)).toBe(0n);
+            expect(toFieldElement("0")).toBe(0n);
+        });
+    });
+
     // ===== POSEIDON HASH TESTS =====
     describe("computePoseidonHash()", () => {
         it("should throw if blockHash is not provided", async () => {
@@ -137,6 +202,30 @@ describe("Utils Module - Complete Function Coverage", () => {
             }
             const firstHash = results[0];
             results.forEach(r => expect(r).toEqual(firstHash));
+        });
+
+        it("should accept Buffer inputs", async () => {
+            const buf = Buffer.from([0x01, 0x02, 0x03]);
+            const hash = await computePoseidonHash(buf, 1);
+            expect(typeof hash).toBe("bigint");
+        });
+
+        it("should accept Uint8Array inputs", async () => {
+            const arr = new Uint8Array([0x01, 0x02, 0x03]);
+            const hash = await computePoseidonHash(arr, 1);
+            expect(typeof hash).toBe("bigint");
+        });
+
+        it("should truncate 32-byte blockHash to 31 bytes", async () => {
+            // Two 32-byte values that differ only in first byte
+            const buf1 = Buffer.alloc(32, 0x00);
+            buf1[0] = 0xff;
+            const buf2 = Buffer.alloc(32, 0x00);
+            buf2[0] = 0x00;
+            // After truncation (last 31 bytes), they should be equal
+            const hash1 = await computePoseidonHash(buf1, 1);
+            const hash2 = await computePoseidonHash(buf2, 1);
+            expect(hash1).toEqual(hash2);
         });
     });
 

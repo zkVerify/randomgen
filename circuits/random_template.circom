@@ -25,11 +25,9 @@ template RandomCircuit(numOutputs, poolSize, startValue) {
     assert(numOutputs >= 1 && numOutputs <= poolSize);
 
     // Public inputs
-    // Note: blockHash is 256 bits, but field size is ~254 bits.
-    // Circom automatically performs a modulo operation to make the value fit in a single field element.
-    // Considering blockHash is the output of a cryptographic hash function, for which
-    // we can assume a quasi-uniform distribution, this should not introduce significant
-    // statistical bias.
+    // Note: blockHash and userNonce must be truncated to 31 bytes (248 bits)
+    // BEFORE being passed to the circuit to ensure they fit in a field element.
+    // This truncation is handled by the JavaScript library (createCircuitInputs, etc.)
     signal input blockHash;
     signal input userNonce;
 
