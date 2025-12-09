@@ -7,8 +7,11 @@
  * 3. Verify the proof
  * 4. Save and load proof data
  * 
- * The production circuit (random_15.circom) generates 15 random outputs per proof.
- * Each output R[i] is computed as: PoseidonEx(...)[i] mod N
+ * The circuit uses Poseidon(2) hash with blockHash and userNonce as inputs,
+ * then RandomPermutate to generate unique shuffled numbers from a contiguous range.
+ * 
+ * Example: random_5_35_1.circom generates 5 unique numbers in range [1, 35]
+ * (like lottery numbers)
  * 
  * Usage:
  *   node examples/e2e-example.js
@@ -19,7 +22,7 @@
  *   - Node.js v14+
  */
 
-const { RandomCircuitOrchestrator, computeLocalHash } = require("../index.js");
+const { RandomCircuitOrchestrator, computeLocalRandomNumbers } = require("../index.js");
 const path = require("path");
 const fs = require("fs");
 
@@ -46,7 +49,9 @@ function section(title) {
   console.log();
 }
 
-const NUM_OUTPUTS = 15; // Number of random outputs to generate (must match circuit)
+const NUM_OUTPUTS = 5;      // Number of random outputs to generate
+const POOL_SIZE = 35;       // Size of the value pool to shuffle
+const START_VALUE = 1;      // First value in range [startValue, startValue+poolSize-1]
 
 async function main() {
   try {
@@ -60,12 +65,14 @@ async function main() {
     log("Creating orchestrator instance...", "blue");
     // All configuration is set in the constructor
     const orchestrator = new RandomCircuitOrchestrator({
-      circuitName: "random_15",
-      circuitPath: path.join(__dirname, "../circuits/random_15.circom"),
+      circuitName: "random_5_35_1",
+      circuitPath: path.join(__dirname, "../circuits/random_5_35_1.circom"),
       numOutputs: NUM_OUTPUTS,
-      power: 15,
+      poolSize: POOL_SIZE,
+      startValue: START_VALUE,
+      power: 13,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
-      ptauName: "ppot_0080_15.ptau",
+      ptauName: "ppot_0080_13.ptau",
       setupEntropy: "e2e-example-setup-entropy",
     });
 
@@ -82,32 +89,27 @@ async function main() {
     const inputs = {
       blockHash: BigInt("12345678901234567890"),
       userNonce: 7,
-      kurierEntropy: 42,
-      N: 1000, // Public input: modulus (output will be in range [0, 1000))
     };
 
     log("Input values:", "blue");
-    log(`  blockHash:     ${inputs.blockHash}`, "dim");
-    log(`  userNonce:     ${inputs.userNonce}`, "dim");
-    log(`  kurierEntropy: ${inputs.kurierEntropy} (private)`, "dim");
-    log(`  N (modulus):   ${inputs.N}`, "dim");
+    log(`  blockHash: ${inputs.blockHash}`, "dim");
+    log(`  userNonce: ${inputs.userNonce}`, "dim");
 
     log("\nGenerating proof (this may take 1-2 seconds)...", "yellow");
-    // numOutputs is already configured in constructor
     const proofResult = await orchestrator.generateRandomProof(inputs);
 
     log("✓ Proof generated successfully", "green");
-    log(`  Random values R:`, "bright");
-    proofResult.R.forEach((r, i) => {
-      log(`    R[${i}]: ${r}`, "bright");
+    log(`  Random numbers (unique values in [${START_VALUE}, ${START_VALUE + POOL_SIZE - 1}]):`, "bright");
+    proofResult.randomNumbers.forEach((r, i) => {
+      log(`    [${i}]: ${r}`, "bright");
     });
 
     // Display proof structure
     log("\nProof structure:", "blue");
-    log(`  Proof pi_a: [${proofResult.proof.pi_a[0]}, ${proofResult.proof.pi_a[1]}, ...]`, "dim");
-    log(`  Proof pi_b: [[${proofResult.proof.pi_b[0][0]}, ...], ...]`, "dim");
-    log(`  Proof pi_c: [${proofResult.proof.pi_c[0]}, ${proofResult.proof.pi_c[1]}, ...]`, "dim");
-    log(`  Public Signals:`, "dim");
+    log(`  Proof pi_a: [${proofResult.proof.pi_a[0].substring(0, 20)}..., ...]`, "dim");
+    log(`  Proof pi_b: [[...], ...]`, "dim");
+    log(`  Proof pi_c: [${proofResult.proof.pi_c[0].substring(0, 20)}..., ...]`, "dim");
+    log(`  Public Signals (randomNumbers):`, "dim");
     proofResult.publicSignals.forEach((signal, index) => {
       log(`    [${index}]: ${signal}`, "dim");
     });
@@ -169,20 +171,23 @@ async function main() {
     }
 
     // ========================================================================
-    // STEP 6: Demonstrate Local Hash Computation
+    // STEP 6: Demonstrate Local Computation
     // ========================================================================
-    section("Step 6: Local Hash Computation");
+    section("Step 6: Local Random Number Computation");
 
-    log("Computing local hash (Poseidon + modulo)...", "blue");
-    const { hashes, R } = await computeLocalHash(inputs, NUM_OUTPUTS);
+    log("Computing random numbers locally (Poseidon + Permutation)...", "blue");
+    const localResult = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, POOL_SIZE, START_VALUE);
 
-    log("✓ Hash computation complete", "green");
-    log(`  Poseidon hashes: [${hashes.slice(0, 3).join(", ")}, ...]`, "dim");
-    log(`  Results (R):`, "dim");
-    R.forEach((r, i) => {
-      log(`    R[${i}]: ${r}`, "dim");
+    log("✓ Local computation complete", "green");
+    log(`  Poseidon seed: ${localResult.seed.substring(0, 40)}...`, "dim");
+    log(`  Random numbers:`, "dim");
+    localResult.randomNumbers.forEach((r, i) => {
+      log(`    [${i}]: ${r}`, "dim");
     });
-    log(`  Matches proof output: ${JSON.stringify(R) === JSON.stringify(proofResult.R)}`, "dim");
+
+    const circuitNumbers = proofResult.randomNumbers.map(r => parseInt(r, 10));
+    const matches = JSON.stringify(circuitNumbers) === JSON.stringify(localResult.randomNumbers);
+    log(`  Matches proof output: ${matches}`, matches ? "green" : "yellow");
 
     // ========================================================================
     // STEP 7: Batch Proof Generation
@@ -197,13 +202,11 @@ async function main() {
       const batchInputs = {
         blockHash: BigInt(i + 1),
         userNonce: i + 1,
-        kurierEntropy: i + 2,
-        N: 1000,
       };
 
       const proof = await orchestrator.generateRandomProof(batchInputs);
       batchProofs.push(proof);
-      log(`  [${i + 1}/${batchSize}] Generated proof with R = [${proof.R.join(", ")}]`, "dim");
+      log(`  [${i + 1}/${batchSize}] Generated proof with numbers = [${proof.randomNumbers.join(", ")}]`, "dim");
     }
 
     log(`✓ Generated ${batchSize} proofs`, "green");
@@ -220,8 +223,14 @@ async function main() {
     log("  3. Proof verification", "dim");
     log("  4. Saving proof data to files", "dim");
     log("  5. Loading and re-verifying saved proofs", "dim");
-    log("  6. Local hash computation verification", "dim");
+    log("  6. Local random number computation verification", "dim");
     log("  7. Batch proof generation workflow", "dim");
+
+    log("\nCircuit Features:", "bright");
+    log(`  - Generates ${NUM_OUTPUTS} unique random numbers per proof`, "dim");
+    log(`  - Output range: [${START_VALUE}, ${START_VALUE + POOL_SIZE - 1}] (like lottery numbers)`, "dim");
+    log("  - Outputs are guaranteed unique (permutation-based)", "dim");
+    log("  - Only 2 inputs: blockHash and userNonce (no private entropy)", "dim");
 
     log("\nNext steps:", "bright");
     log("  - Review the generated proof files in examples/proofs/", "dim");

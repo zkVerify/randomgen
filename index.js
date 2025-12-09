@@ -4,19 +4,23 @@
  * This library provides utilities for generating and verifying zero-knowledge proofs
  * for a Poseidon-based random number generator using Groth16.
  * 
- * The circuit generates multiple random numbers per proof:
- * - random_15.circom: 15 outputs (production default, power=15)
- * - random_3.circom: 3 outputs (testing, power=13)
+ * The circuit generates unique random numbers via permutation:
+ * - Uses Poseidon(2) hash of (blockHash, userNonce) as seed
+ * - Applies Fisher-Yates permutation to generate unique outputs
+ * - Output values are in contiguous range [startValue, startValue + poolSize - 1]
+ * 
+ * Circuit naming convention: random_{numOutputs}_{poolSize}_{startValue}.circom
+ * Example: random_6_49_1.circom for 6 unique numbers from 1-49
  * 
  * Main exports:
  * - RandomCircuitOrchestrator: High-level orchestrator for the complete workflow
- * - computeLocalHash: Compute expected outputs without generating a proof
- * - utils: Core cryptographic functions (Poseidon hashing, proof operations)
+ * - computeLocalRandomNumbers: Compute expected outputs without generating a proof
+ * - utils: Core cryptographic functions (Poseidon hashing, permutation, proof operations)
  * - setup: Functions for circuit compilation and setup
  * 
  * @module randomgen
  * @example
- * const { RandomCircuitOrchestrator, computeLocalHash } = require('randomgen');
+ * const { RandomCircuitOrchestrator, computeLocalRandomNumbers } = require('randomgen');
  * 
  * const orchestrator = new RandomCircuitOrchestrator();
  * await orchestrator.initialize();
@@ -24,17 +28,16 @@
  * const result = await orchestrator.generateRandomProof({
  *   blockHash: 12345n,
  *   userNonce: 7,
- *   kurierEntropy: 42,
- *   N: 1000,
  * });
  * 
- * console.log(result.R); // Array of 15 random values in [0, 1000)
+ * console.log(result.randomNumbers); // Array of unique random values in [startValue, startValue+poolSize-1]
  */
 
-const { RandomCircuitOrchestrator, computeLocalHash } = require("./lib/orchestrator");
+const { RandomCircuitOrchestrator, computeLocalRandomNumbers } = require("./lib/orchestrator");
 const {
+  toFieldElement,
   computePoseidonHash,
-  generateRandomFromSeed,
+  computePermutation,
   createCircuitInputs,
   getWasmPath,
   getFinalZkeyPath,
@@ -56,12 +59,13 @@ const {
 module.exports = {
   // Orchestrator (recommended for most use cases)
   RandomCircuitOrchestrator,
-  computeLocalHash,
+  computeLocalRandomNumbers,
 
   // Utils (low-level cryptographic functions)
   utils: {
+    toFieldElement,
     computePoseidonHash,
-    generateRandomFromSeed,
+    computePermutation,
     createCircuitInputs,
     getWasmPath,
     getFinalZkeyPath,

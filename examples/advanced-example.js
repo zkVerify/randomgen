@@ -8,6 +8,9 @@
  * 4. Performance measurement
  * 5. Proof tampering detection
  * 
+ * The circuit uses Poseidon(2) hash with blockHash and userNonce as inputs,
+ * then RandomPermutate to generate unique shuffled numbers from a contiguous range.
+ * 
  * Usage:
  *   node examples/advanced-example.js [scenario]
  * 
@@ -34,7 +37,9 @@ const colors = {
   cyan: "\x1b[36m",
 };
 
-const NUM_OUTPUTS = 15; // Number of random outputs to generate
+const NUM_OUTPUTS = 5;      // Number of random outputs to generate
+const POOL_SIZE = 35;       // Size of the value pool to shuffle
+const START_VALUE = 1;      // First value in range
 
 function log(message, color = "reset") {
   console.log(`${colors[color]}${message}${colors.reset}`);
@@ -54,11 +59,13 @@ async function exampleCustomConfig() {
   log("Creating orchestrator with custom settings...", "blue");
   // All configuration is set in the constructor
   const customOrchestrator = new RandomCircuitOrchestrator({
-    circuitName: "random_15",
+    circuitName: "random_5_35_1",
     buildDir: path.join(__dirname, "../build"),
     numOutputs: NUM_OUTPUTS,
+    poolSize: POOL_SIZE,
+    startValue: START_VALUE,
     // https://github.com/privacy-ethereum/perpetualpowersoftau
-    ptauName: "ppot_0080_15.ptau",
+    ptauName: "ppot_0080_13.ptau",
     setupEntropy: "advanced-example-setup-entropy",
   });
 
@@ -82,22 +89,23 @@ async function exampleCustomConfig() {
 async function exampleErrorHandling() {
   section("Scenario 2: Error Handling");
 
-  log("Test 1: Invalid input values", "blue");
+  log("Test 1: Missing required input values", "blue");
   try {
     const orchestrator = new RandomCircuitOrchestrator({
       numOutputs: NUM_OUTPUTS,
-      power: 15,
+      poolSize: POOL_SIZE,
+      startValue: START_VALUE,
+      power: 13,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
-      ptauName: "ppot_0080_15.ptau",
+      ptauName: "ppot_0080_13.ptau",
       setupEntropy: "advanced-example-setup-entropy",
     });
     await orchestrator.initialize();
 
+    // Missing userNonce - should fail
     const invalidInputs = {
-      blockHash: "invalid",
-      userNonce: -5, // Negative values might cause issues
-      kurierEntropy: 0,
-      N: 0, // Invalid: N must be positive
+      blockHash: 12345,
+      // userNonce is missing!
     };
 
     await orchestrator.generateRandomProof(invalidInputs);
@@ -137,38 +145,44 @@ async function exampleLowLevel() {
 
   log("Using utils directly for fine-grained control...", "blue");
 
-  // Test 1: Poseidon hashing
+  // Test 1: Poseidon hashing (now takes only 2 inputs)
   log("\nTest 1: Direct Poseidon hashing", "blue");
-  let hash1 = await utils.computePoseidonHash(1, 2, 3, NUM_OUTPUTS);
-  let hash2 = await utils.computePoseidonHash(1, 2, 3, NUM_OUTPUTS);
+  let hash1 = await utils.computePoseidonHash(1, 2);
+  let hash2 = await utils.computePoseidonHash(1, 2);
   log(`Hash 1: ${hash1}`, "dim");
   log(`Hash 2: ${hash2}`, "dim");
-  hash1 = hash1.map(h => h.toString());
-  hash2 = hash2.map(h => h.toString());
-  const consistent = JSON.stringify(hash1) === JSON.stringify(hash2);
+  const consistent = hash1 === hash2;
   log(`Consistent: ${consistent}`, consistent ? "green" : "yellow");
 
-  // Test 2: Random generation (N is now required)
-  log("\nTest 2: Direct random generation from seed", "blue");
+  // Test 2: Permutation computation
+  log("\nTest 2: Direct permutation computation", "blue");
   const seed = hash1;
-  const random1 = utils.generateRandomFromSeed(seed, 1000n);
-  const random2 = utils.generateRandomFromSeed(seed, 500n);
+  const permuted1 = utils.computePermutation(seed, 10);
+  const permuted2 = utils.computePermutation(seed, 10);
   log(`Seed: ${seed}`, "dim");
-  log(`R (mod 1000): ${random1}`, "dim");
-  log(`R (mod 500):  ${random2}`, "dim");
+  log(`Permutation (n=10): [${permuted1.join(", ")}]`, "dim");
+  log(`Repeat:             [${permuted2.join(", ")}]`, "dim");
+  const permConsistent = JSON.stringify(permuted1) === JSON.stringify(permuted2);
+  log(`Consistent: ${permConsistent}`, permConsistent ? "green" : "yellow");
 
-  // Test 3: Circuit inputs (N is now required)
-  log("\nTest 3: Create circuit inputs", "blue");
+  // Test 3: Unique values check
+  log("\nTest 3: Permutation uniqueness", "blue");
+  const permuted = utils.computePermutation(12345n, POOL_SIZE, START_VALUE);
+  const unique = new Set(permuted);
+  log(`Permuted ${POOL_SIZE} values: [${permuted.slice(0, 5).join(", ")}, ...]`, "dim");
+  log(`All unique: ${unique.size === POOL_SIZE}`, unique.size === POOL_SIZE ? "green" : "red");
+
+  // Test 4: Circuit inputs (only blockHash and userNonce now)
+  log("\nTest 4: Create circuit inputs", "blue");
   const circuitInputs = utils.createCircuitInputs({
     blockHash: 100,
     userNonce: 200,
-    kurierEntropy: 300,
-    N: 1000,
   });
   log(`Circuit inputs created:`, "dim");
   Object.entries(circuitInputs).forEach(([key, value]) => {
     log(`  ${key}: ${value}`, "dim");
   });
+  log(`Note: Only 2 inputs now (blockHash, userNonce)`, "dim");
 }
 
 async function examplePerformance() {
@@ -178,9 +192,11 @@ async function examplePerformance() {
     // All configuration in constructor
     const orchestrator = new RandomCircuitOrchestrator({
       numOutputs: NUM_OUTPUTS,
-      power: 15,
+      poolSize: POOL_SIZE,
+      startValue: START_VALUE,
+      power: 13,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
-      ptauName: "ppot_0080_15.ptau",
+      ptauName: "ppot_0080_13.ptau",
       setupEntropy: "advanced-example-setup-entropy",
     });
 
@@ -200,8 +216,6 @@ async function examplePerformance() {
       const inputs = {
         blockHash: BigInt(i + 1),
         userNonce: i + 1,
-        kurierEntropy: i + 2,
-        N: 1000,
       };
 
       // Measure proof generation - uses numOutputs from constructor
@@ -220,7 +234,7 @@ async function examplePerformance() {
       const verifyTime = Date.now() - verifyStart;
       verifyTimes.push(verifyTime);
       log(`  Verification: ${verifyTime}ms`, "dim");
-      log(`  Result: R = ${result.R}, Valid = ${isValid}`, "dim");
+      log(`  Result: randomNumbers = [${result.randomNumbers.join(", ")}], Valid = ${isValid}`, "dim");
     }
 
     // Statistics
@@ -257,8 +271,10 @@ async function exampleTampering() {
     // All configuration in constructor
     const orchestrator = new RandomCircuitOrchestrator({
       numOutputs: NUM_OUTPUTS,
+      poolSize: POOL_SIZE,
+      startValue: START_VALUE,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
-      ptauName: "ppot_0080_15.ptau",
+      ptauName: "ppot_0080_13.ptau",
       setupEntropy: "advanced-example-setup-entropy",
     });
     await orchestrator.initialize();
@@ -266,8 +282,6 @@ async function exampleTampering() {
     const inputs = {
       blockHash: BigInt(123456),
       userNonce: 42,
-      kurierEntropy: 789,
-      N: 1000,
     };
 
     log("Generating original proof...", "blue");
@@ -275,6 +289,7 @@ async function exampleTampering() {
     const originalSignals = JSON.parse(JSON.stringify(result.publicSignals));
 
     log("✓ Original proof generated and verified", "green");
+    log(`  Random numbers: [${result.randomNumbers.join(", ")}]`, "dim");
 
     // Test 1: Tamper with proof data
     log("\nTest 1: Tampering with proof pi_a...", "blue");
@@ -289,10 +304,10 @@ async function exampleTampering() {
       isValid1 ? "red" : "green"
     );
 
-    // Test 2: Tamper with public signals
-    log("\nTest 2: Tampering with public signals...", "blue");
+    // Test 2: Tamper with public signals (random numbers)
+    log("\nTest 2: Tampering with public signals (random numbers)...", "blue");
     const tamperedSignals = JSON.parse(JSON.stringify(result.publicSignals));
-    tamperedSignals[0] = "999"; // Change output value
+    tamperedSignals[0] = "999"; // Change first random number
     const isValid2 = await orchestrator.verifyRandomProof(
       result.proof,
       tamperedSignals

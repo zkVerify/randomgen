@@ -1,79 +1,52 @@
-pragma circom 2.0.0;
+pragma circom 2.1.0;
 
 include "./circomlib/circuits/poseidon.circom";
-include "./circomlib/circuits/comparators.circom";
+include "./random_permutate.circom";
 
-// Template parameter numOutputs: number of random values to generate (1 to 15)
-// PoseidonEx requires nInputs >= nOuts - 1 (since t = nInputs + 1 and nOuts <= t)
-// We have 3 real inputs, so we add dummy inputs as needed to satisfy this constraint
-template RandomCircuit(numOutputs) {
-    // Validate numOutputs at compile time
-    assert(numOutputs >= 1 && numOutputs <= 15);
-
-    // Calculate required number of inputs for PoseidonEx
-    // t = nInputs + 1 must be >= numOutputs, so nInputs >= numOutputs - 1
-    // We have 3 real inputs, so we need max(3, numOutputs - 1) total inputs
-    var numRealInputs = 3;
-    var numTotalInputs = numOutputs > numRealInputs + 1 ? numOutputs - 1 : numRealInputs;
-    var numDummyInputs = numTotalInputs - numRealInputs;
+/**
+ * RandomCircuit - Generates unique random numbers from a contiguous range.
+ *
+ * Parameters:
+ *   - numOutputs: Number of random values to output (1 to poolSize)
+ *   - poolSize: Size of the value pool to shuffle (max 50)
+ *   - startValue: First value in the contiguous range (default concept: 0)
+ *
+ * The circuit shuffles values [startValue, startValue+1, ..., startValue+poolSize-1]
+ * and outputs the first numOutputs values from the shuffled result.
+ *
+ * Example configurations:
+ *   - RandomCircuit(5, 35, 1): Pick 5 from [1..35] (lottery 5/35)
+ *   - RandomCircuit(6, 49, 1): Pick 6 from [1..49] (lottery 6/49)
+ *   - RandomCircuit(3, 10, 0): Pick 3 from [0..9] (zero-based indices)
+ *   - RandomCircuit(5, 20, 100): Pick 5 from [100..119]
+ */
+template RandomCircuit(numOutputs, poolSize, startValue) {
+    assert(poolSize >= 1 && poolSize <= 50);
+    assert(numOutputs >= 1 && numOutputs <= poolSize);
 
     // Public inputs
+    // Note: blockHash and userNonce must be truncated to 31 bytes (248 bits)
+    // BEFORE being passed to the circuit to ensure they fit in a field element.
+    // This truncation is handled by the JavaScript library (createCircuitInputs, etc.)
     signal input blockHash;
     signal input userNonce;
-    signal input N;
-    // Ensure N is greater than 2^3 s.t. quotient and remainder can fit in 252 bits
-    // which is the maximum for Num2Bits_strict and LessThan templates for both
-    // bn128 and bls12-381 fields
-    assert(N > 8 && N < (2**252)); 
-    
-    // Private input
-    signal input kurierEntropy;
 
-    // Step 1: Compute Poseidon hash with multiple outputs using PoseidonEx
-    // PoseidonEx(nInputs, nOuts) - we use numTotalInputs to ensure t >= numOutputs
-    component poseidon = PoseidonEx(numTotalInputs, numOutputs);
-    poseidon.initialState <== 0;
+    // Get Randomness by Poseidon-hashing the inputs
+    component poseidon = Poseidon(2);
     poseidon.inputs[0] <== blockHash;
     poseidon.inputs[1] <== userNonce;
-    poseidon.inputs[2] <== kurierEntropy;
+    signal seed <== poseidon.out;
     
-    // Add dummy inputs (zeros) to satisfy PoseidonEx requirements
-    for (var i = 0; i < numDummyInputs; i++) {
-        poseidon.inputs[numRealInputs + i] <== 0;
+    // Permute the contiguous range [startValue, startValue+poolSize-1]
+    component randomPermute = RandomPermutate(poolSize);
+    for (var i = 0; i < poolSize; i++) {
+        randomPermute.in[i] <== startValue + i;
     }
-    
-    // Arrays for intermediate values and outputs
-    signal hashes[numOutputs];
-    signal quotients[numOutputs];
-    signal output R[numOutputs];
+    randomPermute.hash <== seed;
 
-    // Components for range checks
-    component qCheck[numOutputs];
-    component rCheck[numOutputs];
-    component isLess[numOutputs];
-
-    // Process each hash output to generate R[i] = hash[i] mod N
+    // Output the first numOutputs of the permuted values
+    signal output randomNumbers[numOutputs];
     for (var i = 0; i < numOutputs; i++) {
-        hashes[i] <== poseidon.out[i];
-        
-        // Step 2: Compute R[i] = hash[i] mod N
-        quotients[i] <-- hashes[i] \ N;
-        R[i] <-- hashes[i] % N;
-
-        // Ensure Quotient and Remainder fit in field to prevent overflow attacks
-        qCheck[i] = Num2Bits_strict();
-        qCheck[i].in <== quotients[i];
-        
-        rCheck[i] = Num2Bits_strict();
-        rCheck[i].in <== R[i];
-
-        // Step 3: Verify the modulo decomposition
-        hashes[i] === quotients[i] * N + R[i];
-
-        // Step 4: Ensure R[i] is in the range [0, N)
-        isLess[i] = LessThan(252);
-        isLess[i].in[0] <== R[i];
-        isLess[i].in[1] <== N;
-        isLess[i].out === 1; // R[i] < N
+        randomNumbers[i] <== randomPermute.out[i];
     }
 }

@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const {
     RandomCircuitOrchestrator,
-    computeLocalHash,
+    computeLocalRandomNumbers,
 } = require("../lib/orchestrator.js");
 
 const rootDir = path.resolve(__dirname, "..");
@@ -11,17 +11,17 @@ const buildDir = path.join(rootDir, "build");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_3.circom which is configured with:
-//   - numOutputs = 3 (smaller for faster tests)
-//   - power = 13 (ptau file size)
-// 
-// The production circuit (random.circom) uses:
-//   - numOutputs = 15 (library default)
-//   - power = 15 (ptau file size)
+// Tests use random_5_35_1.circom which is configured with:
+//   - numOutputs = 5
+//   - poolSize = 35
+//   - startValue = 1
+//   - power = 13
 // =============================================================================
-const NUM_OUTPUTS = 3;
+const NUM_OUTPUTS = 5;
+const POOL_SIZE = 35;
+const START_VALUE = 1;
 const TEST_POWER = 13;
-const TEST_CIRCUIT_NAME = "random_3";
+const TEST_CIRCUIT_NAME = "random_5_35_1";
 
 /**
  * Cleans up test artifacts: build directory and generated ptau files
@@ -48,9 +48,11 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     describe("RandomCircuitOrchestrator - Constructor", () => {
         it("should create orchestrator with default options", () => {
             const orch = new RandomCircuitOrchestrator();
-            expect(orch.circuitName).toBe("random_15");
-            expect(orch.numOutputs).toBe(15);
-            expect(orch.power).toBe(15);
+            expect(orch.circuitName).toBe("random_5_35_1");
+            expect(orch.numOutputs).toBe(5);
+            expect(orch.poolSize).toBe(35);
+            expect(orch.startValue).toBe(1);
+            expect(orch.power).toBe(13);
             expect(orch.vkey).toBeNull();
             expect(orch.ptauEntropy).toContain("random-entropy-ptau-");
             expect(orch.setupEntropy).toContain("random-entropy-setup-");
@@ -70,6 +72,13 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                 numOutputs: 5,
             });
             expect(orch.numOutputs).toBe(5);
+        });
+
+        it("should create orchestrator with custom poolSize", () => {
+            const orch = new RandomCircuitOrchestrator({
+                poolSize: 45,
+            });
+            expect(orch.poolSize).toBe(45);
         });
 
         it("should create orchestrator with custom power", () => {
@@ -95,9 +104,9 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
         it("should compute circuitPath from circuitDir and circuitName", () => {
             const orch = new RandomCircuitOrchestrator({
-                circuitName: "random_3",
+                circuitName: "random_3_50",
             });
-            expect(orch.circuitPath).toContain("random_3");
+            expect(orch.circuitPath).toContain("random_3_50");
         });
 
         it("should set default ptauEntropy with timestamp", () => {
@@ -132,6 +141,9 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
         beforeEach(() => {
             orchestrator = new RandomCircuitOrchestrator({
                 circuitName: TEST_CIRCUIT_NAME,
+                numOutputs: NUM_OUTPUTS,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
                 power: TEST_POWER,
             });
         });
@@ -196,6 +208,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             orchestrator = new RandomCircuitOrchestrator({
                 circuitName: TEST_CIRCUIT_NAME,
                 numOutputs: NUM_OUTPUTS,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
                 power: TEST_POWER,
             });
         });
@@ -222,108 +236,110 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
         }, 120000);
     });
 
-    // ===== COMPUTE LOCAL HASH TESTS =====
-    describe("computeLocalHash()", () => {
-        it("should compute local hash with library defaults (15 outputs)", async () => {
+    // ===== COMPUTE LOCAL RANDOM NUMBERS TESTS =====
+    describe("computeLocalRandomNumbers()", () => {
+        it("should compute local random numbers with default poolSize", async () => {
             const inputs = {
                 blockHash: 100,
                 userNonce: 200,
-                kurierEntropy: 300,
             };
-            // Library default: 15 outputs for random.circom
-            const LIBRARY_NUM_OUTPUTS = 15;
-            const result = await computeLocalHash(inputs, LIBRARY_NUM_OUTPUTS);
-            expect(result.hashes).toBeDefined();
-            expect(result.R).toBeDefined();
-            expect(Array.isArray(result.hashes)).toBe(true);
-            expect(Array.isArray(result.R)).toBe(true);
-            expect(result.hashes.length).toBe(LIBRARY_NUM_OUTPUTS);
-            expect(result.R.length).toBe(LIBRARY_NUM_OUTPUTS);
+            const result = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS);
+            expect(result.seed).toBeDefined();
+            expect(result.randomNumbers).toBeDefined();
+            expect(Array.isArray(result.randomNumbers)).toBe(true);
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
         });
 
-        it("should compute local hash with test circuit numOutputs (3)", async () => {
+        it("should compute local random numbers with custom poolSize and startValue", async () => {
             const inputs = {
                 blockHash: 100,
                 userNonce: 200,
-                kurierEntropy: 300,
             };
-            const result = await computeLocalHash(inputs, NUM_OUTPUTS);
-            expect(result.hashes.length).toBe(NUM_OUTPUTS);
-            expect(result.R.length).toBe(NUM_OUTPUTS);
-        });
-
-        it("should compute local hash with custom N", async () => {
-            const inputs = {
-                blockHash: 100,
-                userNonce: 200,
-                kurierEntropy: 300,
-                N: 2000n,
-            };
-            const result = await computeLocalHash(inputs, NUM_OUTPUTS);
-            for (const r of result.R) {
-                expect(BigInt(r)).toBeLessThan(BigInt(2000));
+            const result = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, 30, 0);
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
+            for (const r of result.randomNumbers) {
+                expect(r).toBeGreaterThanOrEqual(0);
+                expect(r).toBeLessThanOrEqual(29);
             }
         });
 
-        it("should respect N parameter in all outputs", async () => {
+        it("should produce unique values (permutation guarantee)", async () => {
             const inputs = {
                 blockHash: 50,
                 userNonce: 100,
-                kurierEntropy: 150,
-                N: 500n,
             };
-            const result = await computeLocalHash(inputs, NUM_OUTPUTS);
-            for (const r of result.R) {
-                const R = BigInt(r);
-                expect(R).toBeLessThan(BigInt(500));
-                expect(R).toBeGreaterThanOrEqual(0n);
-            }
+            const result = await computeLocalRandomNumbers(inputs, 10, POOL_SIZE, START_VALUE);
+            const unique = new Set(result.randomNumbers);
+            expect(unique.size).toBe(10);
         });
 
         it("should produce consistent results for same inputs", async () => {
             const inputs = {
                 blockHash: 111,
                 userNonce: 222,
-                kurierEntropy: 333,
-                N: 1000n,
             };
-            const result1 = await computeLocalHash(inputs, NUM_OUTPUTS);
-            const result2 = await computeLocalHash(inputs, NUM_OUTPUTS);
-            expect(result1.hashes).toEqual(result2.hashes);
-            expect(result1.R).toEqual(result2.R);
+            const result1 = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS);
+            const result2 = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS);
+            expect(result1.seed).toEqual(result2.seed);
+            expect(result1.randomNumbers).toEqual(result2.randomNumbers);
         });
 
         it("should produce different results for different inputs", async () => {
             const inputs1 = {
                 blockHash: 111,
                 userNonce: 222,
-                kurierEntropy: 333,
             };
             const inputs2 = {
                 blockHash: 111,
-                userNonce: 222,
-                kurierEntropy: 334,
+                userNonce: 223,
             };
-            const result1 = await computeLocalHash(inputs1, NUM_OUTPUTS);
-            const result2 = await computeLocalHash(inputs2, NUM_OUTPUTS);
-            // At least one hash should differ
-            const allSame = result1.hashes.every((h, i) => h === result2.hashes[i]);
-            expect(allSame).toBe(false);
+            const result1 = await computeLocalRandomNumbers(inputs1, NUM_OUTPUTS);
+            const result2 = await computeLocalRandomNumbers(inputs2, NUM_OUTPUTS);
+            // Seeds and at least some outputs should differ
+            expect(result1.seed).not.toEqual(result2.seed);
         });
 
-        it("should handle large N values", async () => {
-            const nBigNum = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495616");
+        it("should throw if numOutputs > poolSize", async () => {
+            const inputs = { blockHash: 100, userNonce: 200 };
+            await expect(computeLocalRandomNumbers(inputs, 60, 50)).rejects.toThrow("numOutputs must be <= poolSize");
+        });
+
+        it("should throw if numOutputs is not provided", async () => {
+            const inputs = { blockHash: 100, userNonce: 200 };
+            await expect(computeLocalRandomNumbers(inputs)).rejects.toThrow("numOutputs is required");
+        });
+
+        it("should accept Buffer inputs for blockHash", async () => {
             const inputs = {
-                blockHash: 999,
-                userNonce: 888,
-                kurierEntropy: 777,
-                N: nBigNum,
+                blockHash: Buffer.from([0x01, 0x02, 0x03, 0x04]),
+                userNonce: 200,
             };
-            const result = await computeLocalHash(inputs, NUM_OUTPUTS);
-            for (const r of result.R) {
-                expect(BigInt(r)).toBeGreaterThanOrEqual(0n);
-                expect(BigInt(r)).toBeLessThan(nBigNum);
-            }
+            const result = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS);
+            expect(result.seed).toBeDefined();
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
+        });
+
+        it("should accept Uint8Array inputs for blockHash", async () => {
+            const inputs = {
+                blockHash: new Uint8Array([0x01, 0x02, 0x03, 0x04]),
+                userNonce: 200,
+            };
+            const result = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS);
+            expect(result.seed).toBeDefined();
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
+        });
+
+        it("should truncate 32-byte blockHash to 31 bytes", async () => {
+            // Two 32-byte values that differ only in first byte
+            const buf1 = Buffer.alloc(32, 0x00);
+            buf1[0] = 0xff;
+            const buf2 = Buffer.alloc(32, 0x00);
+            buf2[0] = 0x00;
+            // After truncation (last 31 bytes), they should produce same result
+            const result1 = await computeLocalRandomNumbers({ blockHash: buf1, userNonce: 1 }, NUM_OUTPUTS);
+            const result2 = await computeLocalRandomNumbers({ blockHash: buf2, userNonce: 1 }, NUM_OUTPUTS);
+            expect(result1.seed).toEqual(result2.seed);
+            expect(result1.randomNumbers).toEqual(result2.randomNumbers);
         });
     });
 
@@ -346,8 +362,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                     pi_b: [["3", "4"], ["5", "6"]],
                     pi_c: ["7", "8"],
                 },
-                publicSignals: ["100", "200", "300", "400", "500", "1000", "2000", "3000"],
-                R: ["100", "200", "300", "400", "500"],
+                publicSignals: ["5", "23", "41"],
+                randomNumbers: ["5", "23", "41"],
                 circuitInputs: {
                     blockHash: "123",
                     userNonce: "456",
@@ -358,11 +374,11 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             expect(files).toBeDefined();
             expect(files.proof).toBeDefined();
             expect(files.publicSignals).toBeDefined();
-            expect(files.R).toBeDefined();
+            expect(files.randomNumbers).toBeDefined();
 
             expect(fs.existsSync(files.proof)).toBe(true);
             expect(fs.existsSync(files.publicSignals)).toBe(true);
-            expect(fs.existsSync(files.R)).toBe(true);
+            expect(fs.existsSync(files.randomNumbers)).toBe(true);
         });
 
         it("should throw error for invalid input", async () => {
@@ -375,6 +391,8 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
     // ===== LOAD PROOF DATA TESTS =====
     describe("loadProofData()", () => {
+        let orchestrator;
+
         beforeEach(() => {
             orchestrator = new RandomCircuitOrchestrator();
         });
@@ -398,9 +416,9 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
                     pi_b: [["3", "4"], ["5", "6"]],
                     pi_c: ["7", "8"],
                 },
-                publicSignals: ["100", "200", "300", "400", "500", "1000", "2000", "3000"],
-                R: ["100", "200", "300", "400", "500"],
-                circuitInputs: { blockHash: "123" },
+                publicSignals: ["5", "23", "41"],
+                randomNumbers: ["5", "23", "41"],
+                circuitInputs: { blockHash: "123", userNonce: "456" },
             };
 
             const files = await orchestrator.saveProofData(proofData, buildDir);
@@ -415,14 +433,18 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
     // ===== VERIFY PROOF TESTS =====
     describe("verifyRandomProof()", () => {
+        let orchestrator;
+
         beforeAll(async () => {
             orchestrator = new RandomCircuitOrchestrator({
-                circuitName: "random_3",
+                circuitName: TEST_CIRCUIT_NAME,
                 numOutputs: NUM_OUTPUTS,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
                 power: TEST_POWER,
             });
             await orchestrator.initialize();
-        });
+        }, 120000);
 
         afterAll(() => {
             cleanupTestArtifacts();
@@ -446,37 +468,91 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
     //===== GENERATE RANDOM PROOF TESTS =====
     describe("generateRandomProof()", () => {
-        it("should generate proof successfully with R as array", async () => {
+        let orchestrator;
+
+        beforeAll(async () => {
+            orchestrator = new RandomCircuitOrchestrator({
+                circuitName: TEST_CIRCUIT_NAME,
+                numOutputs: NUM_OUTPUTS,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
+                power: TEST_POWER,
+            });
+            await orchestrator.initialize();
+        }, 120000);
+
+        afterAll(() => {
+            cleanupTestArtifacts();
+        });
+
+        it("should generate proof successfully with randomNumbers as array", async () => {
             const inputs = {
                 blockHash: "12345",
                 userNonce: "67890",
-                kurierEntropy: "54321",
-                N: "1000",
             };
-
-            const orchestrator = new RandomCircuitOrchestrator({
-                circuitName: "random_3",
-                numOutputs: NUM_OUTPUTS,
-                power: TEST_POWER,
-            });
 
             const result = await orchestrator.generateRandomProof(inputs);
             expect(result.proof).toBeDefined();
             expect(result.publicSignals).toBeDefined();
-            expect(result.R).toBeDefined();
+            expect(result.randomNumbers).toBeDefined();
             expect(result.circuitInputs).toBeDefined();
 
-            // R should be an array with NUM_OUTPUTS elements
-            expect(Array.isArray(result.R)).toBe(true);
-            expect(result.R.length).toBe(NUM_OUTPUTS);
+            // randomNumbers should be an array with NUM_OUTPUTS elements
+            expect(Array.isArray(result.randomNumbers)).toBe(true);
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
 
-            // All R values should be in range [0, N)
-            for (const r of result.R) {
-                expect(BigInt(r)).toBeGreaterThanOrEqual(0n);
-                expect(BigInt(r)).toBeLessThan(1000n);
+            // All random numbers should be in range [startValue, startValue + poolSize - 1]
+            for (const r of result.randomNumbers) {
+                expect(BigInt(r)).toBeGreaterThanOrEqual(BigInt(START_VALUE));
+                expect(BigInt(r)).toBeLessThanOrEqual(BigInt(START_VALUE + POOL_SIZE - 1));
             }
 
-            cleanupTestArtifacts();
+            // All random numbers should be unique (permutation guarantee)
+            const unique = new Set(result.randomNumbers);
+            expect(unique.size).toBe(NUM_OUTPUTS);
+
+        }, 120000);
+
+        it("should accept Buffer inputs for blockHash", async () => {
+            const inputs = {
+                blockHash: Buffer.from([0x01, 0x02, 0x03, 0x04, 0x05]),
+                userNonce: 67890,
+            };
+
+            const result = await orchestrator.generateRandomProof(inputs);
+            expect(result.proof).toBeDefined();
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
+        }, 120000);
+
+        it("should accept Uint8Array inputs for blockHash", async () => {
+            const inputs = {
+                blockHash: new Uint8Array([0x01, 0x02, 0x03, 0x04, 0x05]),
+                userNonce: 67890,
+            };
+
+            const result = await orchestrator.generateRandomProof(inputs);
+            expect(result.proof).toBeDefined();
+            expect(result.randomNumbers.length).toBe(NUM_OUTPUTS);
+        }, 120000);
+
+        it("should truncate 32-byte blockHash to 31 bytes and match local computation", async () => {
+            // Two 32-byte values that differ only in first byte
+            const buf1 = Buffer.alloc(32, 0x00);
+            buf1[0] = 0xff;
+            const buf2 = Buffer.alloc(32, 0x00);
+            buf2[0] = 0x00;
+
+            const result1 = await orchestrator.generateRandomProof({ blockHash: buf1, userNonce: 1 });
+            const result2 = await orchestrator.generateRandomProof({ blockHash: buf2, userNonce: 1 });
+
+            // After truncation (last 31 bytes), they should produce same result
+            expect(result1.randomNumbers).toEqual(result2.randomNumbers);
+
+            // Verify circuit matches local computation
+            const localResult = await computeLocalRandomNumbers({ blockHash: buf1, userNonce: 1 }, NUM_OUTPUTS, POOL_SIZE, START_VALUE);
+            for (let i = 0; i < NUM_OUTPUTS; i++) {
+                expect(result1.randomNumbers[i]).toEqual(localResult.randomNumbers[i].toString());
+            }
         }, 120000);
     });
 
@@ -484,7 +560,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     describe("Integration Tests", () => {
 
         it("should work with multiple orchestrator instances", () => {
-            const orch1 = new RandomCircuitOrchestrator({ circuitName: "random_15" });
+            const orch1 = new RandomCircuitOrchestrator({ circuitName: "random_6_50" });
             const orch2 = new RandomCircuitOrchestrator({ circuitName: "custom" });
 
             const val1 = orch1.validateBuildArtifacts();
@@ -493,5 +569,30 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             expect(val1).toBeDefined();
             expect(val2).toBeDefined();
         });
+
+        it("should match circuit output with local computation", async () => {
+            const orchestrator = new RandomCircuitOrchestrator({
+                circuitName: TEST_CIRCUIT_NAME,
+                numOutputs: NUM_OUTPUTS,
+                poolSize: POOL_SIZE,
+                startValue: START_VALUE,
+                power: TEST_POWER,
+            });
+
+            const inputs = {
+                blockHash: "99999",
+                userNonce: "88888",
+            };
+
+            const circuitResult = await orchestrator.generateRandomProof(inputs);
+            const localResult = await computeLocalRandomNumbers(inputs, NUM_OUTPUTS, POOL_SIZE, START_VALUE);
+
+            // Circuit and local computation should match
+            for (let i = 0; i < NUM_OUTPUTS; i++) {
+                expect(circuitResult.randomNumbers[i]).toEqual(localResult.randomNumbers[i].toString());
+            }
+
+            cleanupTestArtifacts();
+        }, 120000);
     });
 });
