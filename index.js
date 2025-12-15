@@ -5,7 +5,7 @@
  * for a Poseidon-based random number generator using Groth16.
  * 
  * The circuit generates multiple random numbers per proof:
- * - random_15.circom: 15 outputs (production default, power=15)
+ * - random_1.circom: 15 outputs (production default, power=15)
  * - random_3.circom: 3 outputs (testing, power=13)
  * 
  * Main exports:
@@ -24,7 +24,6 @@
  * const result = await orchestrator.generateRandomProof({
  *   blockHash: 12345n,
  *   userNonce: 7,
- *   kurierEntropy: 42,
  *   N: 1000,
  * });
  * 
@@ -36,6 +35,8 @@ const {
   computePoseidonHash,
   generateRandomFromSeed,
   createCircuitInputs,
+  truncateTo31Bytes,
+  MAX_31_BYTES,
   getWasmPath,
   getFinalZkeyPath,
   generateProof,
@@ -63,6 +64,8 @@ module.exports = {
     computePoseidonHash,
     generateRandomFromSeed,
     createCircuitInputs,
+    truncateTo31Bytes,
+    MAX_31_BYTES,
     getWasmPath,
     getFinalZkeyPath,
     generateProof,

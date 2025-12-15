@@ -24,7 +24,7 @@ function generateCircuit(numOutputs) {
   }
 
   const filename = numOutputs === 15
-    ? 'random_15.circom'  // Default production circuit
+    ? 'random_1.circom'  // Default production circuit
     : `random_${numOutputs}.circom`;
 
   const filepath = path.join(circuitsDir, filename);

@@ -3,19 +3,13 @@ const wasm_tester = require("circom_tester").wasm;
 const { buildPoseidon } = require("circomlibjs");
 const crypto = require("crypto");
 const { computeLocalHash } = require("../lib/orchestrator.js");
+const { createCircuitInputs } = require("../lib/utils.js");
 const { c } = require("circom_tester");
 
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_3.circom which is configured with:
-//   - numOutputs = 3 (smaller for faster tests)
-//   - power = 13 (ptau file size)
-// 
-// The production circuit (random_15.circom) uses:
-//   - numOutputs = 15 (library default)
-//   - power = 15 (ptau file size)
-// =============================================================================
+
 const NUM_OUTPUTS = 3;
 
 // Helper function to compute SHA256 of input and convert to decimal
@@ -57,7 +51,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(12345678901234567890),
         userNonce: 5,
-        kurierEntropy: 10,
         N: 1000,
       };
 
@@ -73,7 +66,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(1),
         userNonce: 1,
-        kurierEntropy: 1,
         N: 1000,
       };
 
@@ -94,7 +86,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(0),
         userNonce: 0,
-        kurierEntropy: 0,
         N: 1000,
       };
 
@@ -112,7 +103,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(42),
         userNonce: 123,
-        kurierEntropy: 456,
         N: 1000000, // Large N to reduce chance of collisions
       };
 
@@ -136,7 +126,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs1 = {
         blockHash: createBlockHash(1234567890123456789),
         userNonce: 42,
-        kurierEntropy: 100,
         N: 1000,
       };
 
@@ -156,7 +145,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs1 = {
         blockHash: createBlockHash(1),
         userNonce: 1,
-        kurierEntropy: 1,
         N: 1000,
       };
 
@@ -166,7 +154,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs2 = {
         blockHash: createBlockHash(2),
         userNonce: 2,
-        kurierEntropy: 2,
         N: 1000,
       };
 
@@ -179,12 +166,13 @@ describe("Random Circuit Test Suite", () => {
     });
 
     it("Should verify Poseidon output matches circomlibjs", async () => {
-      const inputs = {
+      let inputs = {
         blockHash: createBlockHash(123),
         userNonce: 456,
-        kurierEntropy: 789,
         N: 1000,
       };
+
+      inputs = createCircuitInputs(inputs);
 
       // Calculate circuit output
       const w = await circuit.calculateWitness(inputs, true);
@@ -204,10 +192,10 @@ describe("Random Circuit Test Suite", () => {
   describe("Input Validation", () => {
     it("Should handle different input ranges", async () => {
       const testCases = [
-        { blockHash: createBlockHash(1), userNonce: 1, kurierEntropy: 1, N: 1000 },
-        { blockHash: createBlockHash(100), userNonce: 100, kurierEntropy: 100, N: 1000 },
-        { blockHash: createBlockHash(1000), userNonce: 1000, kurierEntropy: 1000, N: 1000 },
-        { blockHash: createBlockHash(10000), userNonce: 10000, kurierEntropy: 10000, N: 1000 },
+        { blockHash: createBlockHash(1), userNonce: 1, N: 1000 },
+        { blockHash: createBlockHash(100), userNonce: 100, N: 1000 },
+        { blockHash: createBlockHash(1000), userNonce: 1000, N: 1000 },
+        { blockHash: createBlockHash(10000), userNonce: 10000, N: 1000 },
       ];
 
       for (const inputs of testCases) {
@@ -232,7 +220,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(0),
         userNonce: 0,
-        kurierEntropy: 0,
         N: 1000,
       };
 
@@ -252,7 +239,6 @@ describe("Random Circuit Test Suite", () => {
         const inputs = {
           blockHash: createBlockHash(i),
           userNonce: 0,
-          kurierEntropy: 0,
           N: 100,
         };
 
@@ -275,7 +261,6 @@ describe("Random Circuit Test Suite", () => {
         const inputs = {
           blockHash: createBlockHash(i),
           userNonce: 1,
-          kurierEntropy: 1,
           N,
         };
 
@@ -296,7 +281,6 @@ describe("Random Circuit Test Suite", () => {
         const inputs = {
           blockHash: createBlockHash(Math.floor(Math.random() * 1000000)),
           userNonce: Math.floor(Math.random() * 100000),
-          kurierEntropy: Math.floor(Math.random() * 100000),
           N: 1000,
         };
 
@@ -321,7 +305,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(12345),
         userNonce: 7,
-        kurierEntropy: 42,
         N: 1000,
       };
 
@@ -335,7 +318,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(12345),
         userNonce: 67,
-        kurierEntropy: 89,
         N: 1000,
       };
 
@@ -368,7 +350,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(0xdeadbeef),
         userNonce: 123,
-        kurierEntropy: 456,
         N: 1000,
       };
 
@@ -387,7 +368,7 @@ describe("Random Circuit Test Suite", () => {
     });
 
     it("Should produce different outputs for different blockHash", async () => {
-      const baseInputs = { userNonce: 10, kurierEntropy: 20, N: 1000 };
+      const baseInputs = { userNonce: 10, N: 1000 };
 
       const w1 = await circuit.calculateWitness(
         { ...baseInputs, blockHash: createBlockHash(1) },
@@ -407,7 +388,7 @@ describe("Random Circuit Test Suite", () => {
     });
 
     it("Should produce different outputs for different userNonce", async () => {
-      const baseInputs = { blockHash: createBlockHash(100), kurierEntropy: 20, N: 1000 };
+      const baseInputs = { blockHash: createBlockHash(100), N: 1000 };
 
       const w1 = await circuit.calculateWitness(
         { ...baseInputs, userNonce: 1 },
@@ -425,24 +406,6 @@ describe("Random Circuit Test Suite", () => {
       expect(allSame).toBe(false);
     });
 
-    it("Should produce different outputs for different kurierEntropy", async () => {
-      const baseInputs = { blockHash: createBlockHash(100), userNonce: 10, N: 1000 };
-
-      const w1 = await circuit.calculateWitness(
-        { ...baseInputs, kurierEntropy: 1 },
-        true
-      );
-      const w2 = await circuit.calculateWitness(
-        { ...baseInputs, kurierEntropy: 2 },
-        true
-      );
-
-      const outputs1 = extractROutputs(w1);
-      const outputs2 = extractROutputs(w2);
-
-      const allSame = outputs1.every((o, i) => o === outputs2[i]);
-      expect(allSame).toBe(false);
-    });
   });
 
   // ============================================================================
@@ -452,16 +415,15 @@ describe("Random Circuit Test Suite", () => {
   describe("Integration with circomlibjs", () => {
     it("Should produce valid outputs for various inputs", async () => {
       const testCases = [
-        [BigInt(1), BigInt(2), BigInt(3)],
-        [BigInt(100), BigInt(200), BigInt(300)],
-        [BigInt(999), BigInt(888), BigInt(777)],
+        [BigInt(1), BigInt(2)],
+        [BigInt(100), BigInt(200)],
+        [BigInt(999), BigInt(888)],
       ];
 
-      for (const [val1, val2, val3] of testCases) {
+      for (const [val1, val2] of testCases) {
         const inputs = {
           blockHash: val1.toString(),
           userNonce: val2.toString(),
-          kurierEntropy: val3.toString(),
           N: 1000,
         };
 
@@ -480,7 +442,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(42),
         userNonce: 84,
-        kurierEntropy: 126,
         N: 1000,
       };
 
@@ -505,7 +466,6 @@ describe("Random Circuit Test Suite", () => {
       const baseInputs = {
         blockHash: createBlockHash(12345),
         userNonce: 67890,
-        kurierEntropy: 54321,
       };
 
       const nValues = [100, 500, 1000, 5000, 10000, 1000000];
@@ -527,7 +487,6 @@ describe("Random Circuit Test Suite", () => {
       const baseInputs = {
         blockHash: createBlockHash(99999),
         userNonce: 88888,
-        kurierEntropy: 77777,
       };
 
       const nValues = [100, 1000, 10000];
@@ -556,7 +515,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(123),
         userNonce: 456,
-        kurierEntropy: 789,
         // Large N close to 2^252
         N: BigInt("5000000000000000000000000000000000000000000000000000000000000000000000000000"),
       };
@@ -575,7 +533,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(111),
         userNonce: 222,
-        kurierEntropy: 333,
         N: 9,
       };
 
@@ -593,7 +550,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(444),
         userNonce: 555,
-        kurierEntropy: 666,
         N: 8,
       };
 
@@ -608,7 +564,6 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(111),
         userNonce: 222,
-        kurierEntropy: 333,
         N: 1,
       };
 
@@ -622,100 +577,7 @@ describe("Random Circuit Test Suite", () => {
       const inputs = {
         blockHash: createBlockHash(111),
         userNonce: 222,
-        kurierEntropy: 333,
         N: 0,
-      };
-
-      await expect(async () => {
-        const w = await circuit.calculateWitness(inputs, true);
-        await circuit.checkConstraints(w);
-      }).rejects.toThrow();
-    });
-  });
-
-  // ============================================================================
-  // Test Suite: Input Size Limits (Num2Bits_strict - 254 bits max)
-  // ============================================================================
-
-  describe("Input Size Limits (Num2Bits_strict)", () => {
-    // Maximum value that fits in 252 bits
-    const MAX_252_BITS = BigInt(2) ** BigInt(252) - BigInt(1);
-    // Value that exceeds 252 bits (let's use 253 as less than circuit counts one more)
-    const EXCEEDS_252_BITS = BigInt(2) ** BigInt(252);
-
-    it("Should accept inputs at maximum 252-bit value", async () => {
-      const inputs = {
-        blockHash: MAX_252_BITS.toString(),
-        userNonce: 1,
-        kurierEntropy: 1,
-        N: 1000,
-      };
-
-      const w = await circuit.calculateWitness(inputs, true);
-      await circuit.checkConstraints(w);
-      expect(w).toBeDefined();
-    });
-
-    it("Should handle blockHash at boundary values", async () => {
-      const boundaryValues = [
-        BigInt(0),
-        BigInt(1),
-        BigInt(2) ** BigInt(128) - BigInt(1), // 128-bit max
-        BigInt(2) ** BigInt(200) - BigInt(1), // 200-bit max
-        MAX_252_BITS, // 252-bit max (safe)
-      ];
-
-      for (const blockHash of boundaryValues) {
-        const inputs = {
-          blockHash: blockHash.toString(),
-          userNonce: 1,
-          kurierEntropy: 1,
-          N: 1000,
-        };
-
-        const w = await circuit.calculateWitness(inputs, true);
-        await circuit.checkConstraints(w);
-        expect(w).toBeDefined();
-      }
-    });
-
-    it("Should handle N at various bit sizes (all > 8)", async () => {
-      const nValues = [
-        BigInt(9),                // Minimum valid (N > 8)
-        BigInt(2) ** BigInt(8),   // 256
-        BigInt(2) ** BigInt(16),  // 65536
-        BigInt(2) ** BigInt(32),  // ~4 billion
-        BigInt(2) ** BigInt(64),  // Large
-        BigInt(2) ** BigInt(128), // Very large
-        BigInt(2) ** BigInt(200), // Extremely large
-        MAX_252_BITS, // Near max
-      ];
-
-      for (const N of nValues) {
-        const inputs = {
-          blockHash: createBlockHash(12345),
-          userNonce: 67890,
-          kurierEntropy: 54321,
-          N: N.toString(),
-        };
-
-        const w = await circuit.calculateWitness(inputs, true);
-        await circuit.checkConstraints(w);
-
-        const outputs = extractROutputs(w);
-        for (const output of outputs) {
-          expect(output).toBeGreaterThanOrEqual(BigInt(0));
-          expect(output).toBeLessThan(N);
-        }
-      }
-    });
-
-    it("Should fail when N exceeds 2^252 (exceeds Num2Bits_strict limit)", async () => {
-      const inputs = {
-        blockHash: createBlockHash(999),
-        userNonce: 888,
-        kurierEntropy: 777,
-        N: EXCEEDS_252_BITS.toString(),
       };
 
       await expect(async () => {

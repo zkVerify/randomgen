@@ -20,14 +20,7 @@ const buildDir = path.join(rootDir, "build");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_3.circom which is configured with:
-//   - numOutputs = 3 (smaller for faster tests)
-//   - power = 13 (ptau file size)
-// 
-// The production circuit (random_15.circom) uses:
-//   - numOutputs = 15 (library default)
-//   - power = 15 (ptau file size)
-// =============================================================================
+
 const TEST_CIRCUIT_NAME = "random_3";
 const TEST_POWER = 13;
 const NUM_OUTPUTS = 3;
@@ -75,7 +68,6 @@ describe("Utils Module - Complete Function Coverage", () => {
         circuitInputs = createCircuitInputs({
             blockHash: 12345,
             userNonce: 67890,
-            kurierEntropy: 54321,
             N: 1000,
         });
         vkey = loadVerificationKey("verification_key.json");
@@ -88,36 +80,36 @@ describe("Utils Module - Complete Function Coverage", () => {
     // ===== POSEIDON HASH TESTS =====
     describe("computePoseidonHash()", () => {
         it("should throw if nOuts is not provided", async () => {
-            await expect(computePoseidonHash(1, 2, 3)).rejects.toThrow("nOuts is required");
+            await expect(computePoseidonHash(1, 2)).rejects.toThrow("nOuts is required");
         });
 
         it("should return an array with single output", async () => {
-            const hashes = await computePoseidonHash(1, 2, 3, 1);
+            const hashes = await computePoseidonHash(1, 2, 1);
             expect(Array.isArray(hashes)).toBe(true);
             expect(hashes.length).toBe(1);
             expect(typeof hashes[0]).toBe("bigint");
         });
 
         it("should compute consistent Poseidon hash for same inputs", async () => {
-            const hash1 = await computePoseidonHash(1, 2, 3, 1);
-            const hash2 = await computePoseidonHash(1, 2, 3, 1);
+            const hash1 = await computePoseidonHash(1, 2, 1);
+            const hash2 = await computePoseidonHash(1, 2, 1);
             expect(hash1).toEqual(hash2);
         });
 
         it("should produce different hashes for different inputs", async () => {
-            const hash1 = await computePoseidonHash(1, 2, 3, 1);
-            const hash2 = await computePoseidonHash(1, 2, 4, 1);
+            const hash1 = await computePoseidonHash(1, 2, 1);
+            const hash2 = await computePoseidonHash(1, 3, 1);
             expect(hash1[0]).not.toEqual(hash2[0]);
         });
 
         it("should accept string and number inputs", async () => {
-            const hash1 = await computePoseidonHash("100", "200", "300", 1);
-            const hash2 = await computePoseidonHash(BigInt(100), BigInt(200), BigInt(300), 1);
+            const hash1 = await computePoseidonHash("100", "200", 1);
+            const hash2 = await computePoseidonHash(BigInt(100), BigInt(200), 1);
             expect(hash1).toEqual(hash2);
         });
 
         it("should handle zero inputs", async () => {
-            const hashes = await computePoseidonHash(0, 0, 0, 1);
+            const hashes = await computePoseidonHash(0, 0, 1);
             expect(hashes).toBeDefined();
             expect(Array.isArray(hashes)).toBe(true);
             expect(typeof hashes[0]).toBe("bigint");
@@ -125,7 +117,7 @@ describe("Utils Module - Complete Function Coverage", () => {
 
         it("should handle large numbers", async () => {
             const largeNum = BigInt("12345678901234567890123456789012345678901234567890");
-            const hashes = await computePoseidonHash(largeNum, 1, 1, 1);
+            const hashes = await computePoseidonHash(largeNum, 1, 1);
             expect(hashes).toBeDefined();
             expect(Array.isArray(hashes)).toBe(true);
             expect(hashes[0]).toBeGreaterThan(0n);
@@ -134,29 +126,29 @@ describe("Utils Module - Complete Function Coverage", () => {
         it("should be deterministic across multiple calls", async () => {
             const results = [];
             for (let i = 0; i < 5; i++) {
-                results.push(await computePoseidonHash(100, 200, 300, 1));
+                results.push(await computePoseidonHash(100, 200, 1));
             }
             const firstHash = results[0][0];
             results.forEach(r => expect(r[0]).toEqual(firstHash));
         });
 
         it("should return multiple outputs when nOuts > 1", async () => {
-            const hashes = await computePoseidonHash(1, 2, 3, 5);
+            const hashes = await computePoseidonHash(1, 2, 5);
             expect(Array.isArray(hashes)).toBe(true);
             expect(hashes.length).toBe(5);
             hashes.forEach(h => expect(typeof h).toBe("bigint"));
         });
 
         it("should return different values for each output", async () => {
-            const hashes = await computePoseidonHash(1, 2, 3, 5);
+            const hashes = await computePoseidonHash(1, 2, 5);
             const unique = new Set(hashes.map(h => h.toString()));
             // At least some outputs should be different
             expect(unique.size).toBeGreaterThan(1);
         });
 
         it("should produce consistent multi-output results", async () => {
-            const hashes1 = await computePoseidonHash(100, 200, 300, 3);
-            const hashes2 = await computePoseidonHash(100, 200, 300, 3);
+            const hashes1 = await computePoseidonHash(100, 200, 3);
+            const hashes2 = await computePoseidonHash(100, 200, 3);
             expect(hashes1).toEqual(hashes2);
         });
     });
@@ -228,7 +220,7 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should work with Poseidon hash outputs", async () => {
-            const hashes = await computePoseidonHash(100, 200, 300, NUM_OUTPUTS);
+            const hashes = await computePoseidonHash(100, 200, NUM_OUTPUTS);
             const N = BigInt(1000);
             const randoms = generateRandomFromSeed(hashes, N);
             expect(randoms.length).toBe(NUM_OUTPUTS);
@@ -246,7 +238,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 123,
                 userNonce: 456,
-                kurierEntropy: 789,
             };
             expect(() => createCircuitInputs(inputs)).toThrow("inputs.N is required");
         });
@@ -255,13 +246,11 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 123,
                 userNonce: 456,
-                kurierEntropy: 789,
                 N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
             expect(circuitInputs.blockHash).toBeDefined();
             expect(circuitInputs.userNonce).toBeDefined();
-            expect(circuitInputs.kurierEntropy).toBeDefined();
             expect(circuitInputs.N).toBeDefined();
         });
 
@@ -269,13 +258,11 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 123,
                 userNonce: 456,
-                kurierEntropy: 789,
                 N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
             expect(typeof circuitInputs.blockHash).toBe("string");
             expect(typeof circuitInputs.userNonce).toBe("string");
-            expect(typeof circuitInputs.kurierEntropy).toBe("string");
             expect(typeof circuitInputs.N).toBe("string");
         });
 
@@ -283,7 +270,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: "0x7b",
                 userNonce: 100,
-                kurierEntropy: 200,
                 N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
@@ -294,7 +280,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 555,
                 userNonce: 666,
-                kurierEntropy: 777,
                 N: 2000,
             };
             const result1 = createCircuitInputs(inputs);
@@ -306,7 +291,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 0,
                 userNonce: 0,
-                kurierEntropy: 0,
                 N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
@@ -318,7 +302,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: largeNum,
                 userNonce: largeNum,
-                kurierEntropy: largeNum,
                 N: 1000,
             };
             const circuitInputs = createCircuitInputs(inputs);
@@ -329,7 +312,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const baseInputs = {
                 blockHash: 100,
                 userNonce: 200,
-                kurierEntropy: 300,
             };
             const result1 = createCircuitInputs({ ...baseInputs, N: 100 });
             const result2 = createCircuitInputs({ ...baseInputs, N: 10000 });
@@ -346,10 +328,10 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should return correct wasm path with circuit name", () => {
-            const wasmPath = getWasmPath("random_15");
+            const wasmPath = getWasmPath("random_3");
             expect(wasmPath).toContain("build");
-            expect(wasmPath).toContain("random_15_js");
-            expect(wasmPath).toContain("random_15.wasm");
+            expect(wasmPath).toContain("random_3_js");
+            expect(wasmPath).toContain("random_3.wasm");
         });
 
         it("should return correct wasm path with custom circuit name", () => {
@@ -359,9 +341,9 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should return correct zkey path with circuit name", () => {
-            const zkeyPath = getFinalZkeyPath("random_15");
+            const zkeyPath = getFinalZkeyPath("random_3");
             expect(zkeyPath).toContain("build");
-            expect(zkeyPath).toContain("random_15_final.zkey");
+            expect(zkeyPath).toContain("random_3_final.zkey");
         });
 
         it("should return correct zkey path with custom circuit name", () => {
@@ -370,8 +352,8 @@ describe("Utils Module - Complete Function Coverage", () => {
         });
 
         it("should generate absolute paths", () => {
-            const wasmPath = getWasmPath("random_15");
-            const zkeyPath = getFinalZkeyPath("random_15");
+            const wasmPath = getWasmPath("random_3");
+            const zkeyPath = getFinalZkeyPath("random_3");
             expect(path.isAbsolute(wasmPath)).toBe(true);
             expect(path.isAbsolute(zkeyPath)).toBe(true);
         });
@@ -427,7 +409,7 @@ describe("Utils Module - Complete Function Coverage", () => {
     // ===== FULL WORKFLOW TEST =====
     describe("fullWorkflow()", () => {
         it("should throw if circuitName not provided", async () => {
-            await expect(fullWorkflow({ blockHash: 1, userNonce: 2, kurierEntropy: 3, N: 1000 })).rejects.toThrow("circuitName is required");
+            await expect(fullWorkflow({ blockHash: 1, userNonce: 2, N: 1000 })).rejects.toThrow("circuitName is required");
         });
 
         it("should execute complete workflow if artifacts exist", async () => {
@@ -441,7 +423,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 99999,
                 userNonce: 88888,
-                kurierEntropy: 77777,
                 N: 1000,
             };
 
@@ -460,7 +441,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const baseInputs = {
                 blockHash: 12345,
                 userNonce: 67890,
-                kurierEntropy: 54321,
             };
 
             const nValues = [100, 500, 1000, 5000, 10000];
@@ -493,14 +473,12 @@ describe("Utils Module - Complete Function Coverage", () => {
             const baseInputs = {
                 blockHash: 99999,
                 userNonce: 88888,
-                kurierEntropy: 77777,
             };
 
             // Get the underlying hashes (NUM_OUTPUTS outputs to match circuit)
             const hashes = await computePoseidonHash(
                 baseInputs.blockHash,
                 baseInputs.userNonce,
-                baseInputs.kurierEntropy,
                 NUM_OUTPUTS
             );
 
@@ -531,7 +509,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const circuitInputs = createCircuitInputs({
                 blockHash: 12345,
                 userNonce: 67890,
-                kurierEntropy: 54321,
                 N: largeN,
             });
 
@@ -552,7 +529,6 @@ describe("Utils Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 77777,
                 userNonce: 88888,
-                kurierEntropy: 99999,
                 N: 1000,
             };
 

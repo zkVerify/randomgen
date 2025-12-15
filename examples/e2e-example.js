@@ -7,7 +7,7 @@
  * 3. Verify the proof
  * 4. Save and load proof data
  * 
- * The production circuit (random_15.circom) generates 15 random outputs per proof.
+ * The production circuit (random_1.circom) generates 15 random outputs per proof.
  * Each output R[i] is computed as: PoseidonEx(...)[i] mod N
  * 
  * Usage:
@@ -22,6 +22,7 @@
 const { RandomCircuitOrchestrator, computeLocalHash } = require("../index.js");
 const path = require("path");
 const fs = require("fs");
+const { MAX_31_BYTES } = require("../lib/utils.js");
 
 // Color codes for console output
 const colors = {
@@ -46,7 +47,8 @@ function section(title) {
   console.log();
 }
 
-const NUM_OUTPUTS = 15; // Number of random outputs to generate (must match circuit)
+const NUM_OUTPUTS = 1; // Number of random outputs to generate (must match circuit)
+const POWER = 11; // Powers of tau size
 
 async function main() {
   try {
@@ -60,12 +62,12 @@ async function main() {
     log("Creating orchestrator instance...", "blue");
     // All configuration is set in the constructor
     const orchestrator = new RandomCircuitOrchestrator({
-      circuitName: "random_15",
-      circuitPath: path.join(__dirname, "../circuits/random_15.circom"),
+      circuitName: `random_${NUM_OUTPUTS}`,
+      circuitPath: path.join(__dirname, `../circuits/random_${NUM_OUTPUTS}.circom`),
       numOutputs: NUM_OUTPUTS,
-      power: 15,
+      power: POWER,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
-      ptauName: "ppot_0080_15.ptau",
+      ptauName: `ppot_0080_${POWER}.ptau`,
       setupEntropy: "e2e-example-setup-entropy",
     });
 
@@ -82,14 +84,12 @@ async function main() {
     const inputs = {
       blockHash: BigInt("12345678901234567890"),
       userNonce: 7,
-      kurierEntropy: 42,
-      N: 1000, // Public input: modulus (output will be in range [0, 1000))
+      N: MAX_31_BYTES, // Public input: modulus (output will be in range [0, 2^248 - 1))
     };
 
     log("Input values:", "blue");
     log(`  blockHash:     ${inputs.blockHash}`, "dim");
     log(`  userNonce:     ${inputs.userNonce}`, "dim");
-    log(`  kurierEntropy: ${inputs.kurierEntropy} (private)`, "dim");
     log(`  N (modulus):   ${inputs.N}`, "dim");
 
     log("\nGenerating proof (this may take 1-2 seconds)...", "yellow");
@@ -197,8 +197,7 @@ async function main() {
       const batchInputs = {
         blockHash: BigInt(i + 1),
         userNonce: i + 1,
-        kurierEntropy: i + 2,
-        N: 1000,
+        N: MAX_31_BYTES,
       };
 
       const proof = await orchestrator.generateRandomProof(batchInputs);

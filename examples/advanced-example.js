@@ -34,7 +34,8 @@ const colors = {
   cyan: "\x1b[36m",
 };
 
-const NUM_OUTPUTS = 15; // Number of random outputs to generate
+const NUM_OUTPUTS = 1; // Number of random outputs to generate (must match circuit)
+const POWER = 11; // Powers of tau size
 
 function log(message, color = "reset") {
   console.log(`${colors[color]}${message}${colors.reset}`);
@@ -54,11 +55,12 @@ async function exampleCustomConfig() {
   log("Creating orchestrator with custom settings...", "blue");
   // All configuration is set in the constructor
   const customOrchestrator = new RandomCircuitOrchestrator({
-    circuitName: "random_15",
-    buildDir: path.join(__dirname, "../build"),
+    circuitName: `random_${NUM_OUTPUTS}`,
+    circuitPath: path.join(__dirname, `../circuits/random_${NUM_OUTPUTS}.circom`),
     numOutputs: NUM_OUTPUTS,
+    power: POWER,
     // https://github.com/privacy-ethereum/perpetualpowersoftau
-    ptauName: "ppot_0080_15.ptau",
+    ptauName: `ppot_0080_${POWER}.ptau`,
     setupEntropy: "advanced-example-setup-entropy",
   });
 
@@ -85,10 +87,12 @@ async function exampleErrorHandling() {
   log("Test 1: Invalid input values", "blue");
   try {
     const orchestrator = new RandomCircuitOrchestrator({
+      circuitName: `random_${NUM_OUTPUTS}`,
+      circuitPath: path.join(__dirname, `../circuits/random_${NUM_OUTPUTS}.circom`),
       numOutputs: NUM_OUTPUTS,
-      power: 15,
+      power: POWER,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
-      ptauName: "ppot_0080_15.ptau",
+      ptauName: `ppot_0080_${POWER}.ptau`,
       setupEntropy: "advanced-example-setup-entropy",
     });
     await orchestrator.initialize();
@@ -96,7 +100,6 @@ async function exampleErrorHandling() {
     const invalidInputs = {
       blockHash: "invalid",
       userNonce: -5, // Negative values might cause issues
-      kurierEntropy: 0,
       N: 0, // Invalid: N must be positive
     };
 
@@ -119,10 +122,6 @@ async function exampleErrorHandling() {
   log("\nTest 3: Verification with invalid key", "blue");
   try {
     const orchestrator = new RandomCircuitOrchestrator();
-
-    // Try to verify without initialization (no vkey loaded)
-    const fakeProof = { pi_a: [0, 0], pi_b: [[0, 0], [0, 0]], pi_c: [0, 0] };
-    const fakeSignals = [123];
 
     if (!orchestrator.vkey) {
       throw new Error("Verification key not loaded. Call initialize() first.");
@@ -162,7 +161,6 @@ async function exampleLowLevel() {
   const circuitInputs = utils.createCircuitInputs({
     blockHash: 100,
     userNonce: 200,
-    kurierEntropy: 300,
     N: 1000,
   });
   log(`Circuit inputs created:`, "dim");
@@ -177,10 +175,12 @@ async function examplePerformance() {
   try {
     // All configuration in constructor
     const orchestrator = new RandomCircuitOrchestrator({
+      circuitName: `random_${NUM_OUTPUTS}`,
+      circuitPath: path.join(__dirname, `../circuits/random_${NUM_OUTPUTS}.circom`),
       numOutputs: NUM_OUTPUTS,
-      power: 15,
+      power: POWER,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
-      ptauName: "ppot_0080_15.ptau",
+      ptauName: `ppot_0080_${POWER}.ptau`,
       setupEntropy: "advanced-example-setup-entropy",
     });
 
@@ -200,7 +200,6 @@ async function examplePerformance() {
       const inputs = {
         blockHash: BigInt(i + 1),
         userNonce: i + 1,
-        kurierEntropy: i + 2,
         N: 1000,
       };
 
@@ -256,9 +255,12 @@ async function exampleTampering() {
   try {
     // All configuration in constructor
     const orchestrator = new RandomCircuitOrchestrator({
+      circuitName: `random_${NUM_OUTPUTS}`,
+      circuitPath: path.join(__dirname, `../circuits/random_${NUM_OUTPUTS}.circom`),
       numOutputs: NUM_OUTPUTS,
+      power: POWER,
       // https://github.com/privacy-ethereum/perpetualpowersoftau
-      ptauName: "ppot_0080_15.ptau",
+      ptauName: `ppot_0080_${POWER}.ptau`,
       setupEntropy: "advanced-example-setup-entropy",
     });
     await orchestrator.initialize();
@@ -266,7 +268,6 @@ async function exampleTampering() {
     const inputs = {
       blockHash: BigInt(123456),
       userNonce: 42,
-      kurierEntropy: 789,
       N: 1000,
     };
 

@@ -11,14 +11,7 @@ const buildDir = path.join(rootDir, "build");
 // =============================================================================
 // TEST CIRCUIT CONFIGURATION
 // =============================================================================
-// Tests use random_3.circom which is configured with:
-//   - numOutputs = 3 (smaller for faster tests)
-//   - power = 13 (ptau file size)
-// 
-// The production circuit (random.circom) uses:
-//   - numOutputs = 15 (library default)
-//   - power = 15 (ptau file size)
-// =============================================================================
+
 const NUM_OUTPUTS = 3;
 const TEST_POWER = 13;
 const TEST_CIRCUIT_NAME = "random_3";
@@ -48,9 +41,9 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     describe("RandomCircuitOrchestrator - Constructor", () => {
         it("should create orchestrator with default options", () => {
             const orch = new RandomCircuitOrchestrator();
-            expect(orch.circuitName).toBe("random_15");
-            expect(orch.numOutputs).toBe(15);
-            expect(orch.power).toBe(15);
+            expect(orch.circuitName).toBe("random_1");
+            expect(orch.numOutputs).toBe(1);
+            expect(orch.power).toBe(11);
             expect(orch.vkey).toBeNull();
             expect(orch.ptauEntropy).toContain("random-entropy-ptau-");
             expect(orch.setupEntropy).toContain("random-entropy-setup-");
@@ -131,6 +124,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
 
         beforeEach(() => {
             orchestrator = new RandomCircuitOrchestrator({
+                numOutputs: NUM_OUTPUTS,
                 circuitName: TEST_CIRCUIT_NAME,
                 power: TEST_POWER,
             });
@@ -228,10 +222,10 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 100,
                 userNonce: 200,
-                kurierEntropy: 300,
+                N: 1000n,
             };
-            // Library default: 15 outputs for random.circom
-            const LIBRARY_NUM_OUTPUTS = 15;
+            // Library default: 1 output for random_1.circom
+            const LIBRARY_NUM_OUTPUTS = 1;
             const result = await computeLocalHash(inputs, LIBRARY_NUM_OUTPUTS);
             expect(result.hashes).toBeDefined();
             expect(result.R).toBeDefined();
@@ -245,7 +239,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 100,
                 userNonce: 200,
-                kurierEntropy: 300,
+                N: 1000n,
             };
             const result = await computeLocalHash(inputs, NUM_OUTPUTS);
             expect(result.hashes.length).toBe(NUM_OUTPUTS);
@@ -256,7 +250,6 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 100,
                 userNonce: 200,
-                kurierEntropy: 300,
                 N: 2000n,
             };
             const result = await computeLocalHash(inputs, NUM_OUTPUTS);
@@ -269,7 +262,6 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 50,
                 userNonce: 100,
-                kurierEntropy: 150,
                 N: 500n,
             };
             const result = await computeLocalHash(inputs, NUM_OUTPUTS);
@@ -284,7 +276,6 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 111,
                 userNonce: 222,
-                kurierEntropy: 333,
                 N: 1000n,
             };
             const result1 = await computeLocalHash(inputs, NUM_OUTPUTS);
@@ -297,12 +288,12 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const inputs1 = {
                 blockHash: 111,
                 userNonce: 222,
-                kurierEntropy: 333,
+                N: 1000n,
             };
             const inputs2 = {
                 blockHash: 111,
-                userNonce: 222,
-                kurierEntropy: 334,
+                userNonce: 223,
+                N: 1000n,
             };
             const result1 = await computeLocalHash(inputs1, NUM_OUTPUTS);
             const result2 = await computeLocalHash(inputs2, NUM_OUTPUTS);
@@ -316,7 +307,6 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: 999,
                 userNonce: 888,
-                kurierEntropy: 777,
                 N: nBigNum,
             };
             const result = await computeLocalHash(inputs, NUM_OUTPUTS);
@@ -450,7 +440,6 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
             const inputs = {
                 blockHash: "12345",
                 userNonce: "67890",
-                kurierEntropy: "54321",
                 N: "1000",
             };
 
@@ -484,7 +473,7 @@ describe("Orchestrator Module - Complete Function Coverage", () => {
     describe("Integration Tests", () => {
 
         it("should work with multiple orchestrator instances", () => {
-            const orch1 = new RandomCircuitOrchestrator({ circuitName: "random_15" });
+            const orch1 = new RandomCircuitOrchestrator({ circuitName: "random_1" });
             const orch2 = new RandomCircuitOrchestrator({ circuitName: "custom" });
 
             const val1 = orch1.validateBuildArtifacts();

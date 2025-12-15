@@ -12,26 +12,18 @@ RandomGen provides a secure, verifiable way to generate multiple random numbers 
 
 ### Circuit Details
 
-The circuit takes three public inputs and one private input to produce multiple random numbers:
+The circuit takes three public inputs to produce multiple random numbers:
 
 - **Public inputs**: `blockHash`, `userNonce`, `N` (modulus)
-- **Private input**: `kurierEntropy` (optional extra entropy)
 - **Output**: `R[numOutputs]` = array of `Poseidon(...) mod N` values
 
 Each output `R[i]` is in the range [0, N).
 
+> **Note**: All input values (`blockHash`, `userNonce`, `N`) are truncated to 31 bytes (248 bits) if they exceed that size to fit within the BN128 field.
+
 ### Circuit Variants
 
 The library provides **15 pre-generated circuit variants**, each configured for a different number of random outputs (1-15). All circuits share the same template logic from `random_template.circom`.
-
-| Circuit File                           | numOutputs | Recommended Power | Use Case                     |
-| -------------------------------------- | ---------- | ----------------- | ---------------------------- |
-| `random_1.circom`                      | 1          | 12                | Single random value          |
-| `random_2.circom`                      | 2          | 12                | Pair of random values        |
-| `random_3.circom`                      | 3          | 13                | Testing (faster compilation) |
-| `random_4.circom`                      | 4          | 13                | Small batches                |
-| `random_5.circom` - `random_14.circom` | 5-14       | 14                | Medium batches               |
-| `random_15.circom`                     | 15         | 15                | Production (library default) |
 
 > ⚠️ **Important**: The `numOutputs` parameter in your orchestrator/code **must match** the circuit's configured outputs. Mismatches will cause proof generation to fail.
 
@@ -49,9 +41,7 @@ node scripts/generate-circuits.js 3 5 10
 
 #### Choosing the Right Circuit
 
-- **For testing/development**: Use `random_3.circom` with `power: 13` for faster compilation (~10s vs ~60s)
-- **For production**: Use `random_15.circom` with `power: 15` for maximum random outputs
-- **For specific needs**: Choose the circuit that matches your exact `numOutputs` requirement
+Choose the circuit that matches your exact `numOutputs` requirement
 
 The circuit uses `PoseidonEx` to generate multiple hash outputs efficiently. For `numOutputs > 4`, dummy zero inputs are added to satisfy `PoseidonEx` constraints (`t = nInputs + 1` must be `>= numOutputs`).
 
@@ -98,16 +88,6 @@ For production use, it's **strongly recommended** to use pre-prepared Phase 2 Po
    - https://github.com/privacy-ethereum/perpetualpowersoftau?tab=readme-ov-file#prepared-and-truncated-files
    - More contributions = stronger security guarantees
 
-**Example usage with pre-prepared files:**
-
-```bash
-# Download a prepared ptau file (e.g., power 15 for production)
-curl -O https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_15.ptau
-
-# Rename to match expected format
-mv powersOfTau28_hez_final_15.ptau pot15_final.ptau
-```
-
 > 💡 **Why use prepared files?** The security of Groth16 proofs depends on the "toxic waste" from the Powers of Tau ceremony being destroyed. Pre-prepared files from multi-party ceremonies ensure that as long as at least one participant was honest, the ceremony is secure.
 
 ### Install RandomGen
@@ -134,13 +114,13 @@ const { RandomCircuitOrchestrator } = require('randomgen');
 async function generateRandomProof() {
   // Create orchestrator instance with all configuration
   // ⚠️ IMPORTANT: numOutputs MUST match the circuit file you're using!
-  //    - circuitName: 'random_15' → numOutputs: 15
+  //    - circuitName: 'random_1' → numOutputs: 1
   //    - circuitName: 'random_3'  → numOutputs: 3
   //    - circuitName: 'random_N'  → numOutputs: N
   const orchestrator = new RandomCircuitOrchestrator({
-    circuitName: 'random_15',   // Uses random_15.circom (15 outputs)
-    numOutputs: 15,             // Must match circuit's numOutputs!
-    power: 15,                  // Powers of tau (2^15 constraints)
+    circuitName: 'random_1',   // Uses random_1.circom
+    numOutputs: 1,             // Must match circuit's numOutputs!
+    power: 11,                  // Powers of tau (2^11 constraints)
     ptauEntropy: 'my-ptau-entropy',    // Entropy for ptau ceremony
     setupEntropy: 'my-setup-entropy',  // Entropy for zkey ceremony
   });
@@ -152,7 +132,6 @@ async function generateRandomProof() {
   const inputs = {
     blockHash: 12345678901234567890n,
     userNonce: 7,
-    kurierEntropy: 42,
     N: 1000,  // Public input: modulus for the random number range
   };
 
@@ -182,12 +161,11 @@ async function lowLevelExample() {
   const inputs = utils.createCircuitInputs({
     blockHash: 100,
     userNonce: 200,
-    kurierEntropy: 300,
     N: 1000,
   });
 
   console.log('Circuit inputs:', inputs);
-  // Output: { blockHash: '100', userNonce: '200', kurierEntropy: '300', N: '1000' }
+  // Output: { blockHash: '100', userNonce: '200', N: '1000' }
 
   // Generate proof (circuitName is required)
   const { proof, publicSignals } = await utils.generateProof(inputs, 'random');
@@ -213,9 +191,9 @@ async function setupCircuit() {
   // Complete setup with all required parameters
   // Only regenerates missing artifacts (smart caching)
   await setup.completeSetup('random', {
-    circuitPath: 'circuits/random_15.circom',
-    power: 15,
-    ptauName: 'pot15_final.ptau',
+    circuitPath: 'circuits/random_1.circom',
+    power: 11,
+    ptauName: 'pot11_final.ptau',
     ptauEntropy: 'my-ptau-entropy',    // Required for ptau ceremony
     setupEntropy: 'my-setup-entropy',  // Required for zkey ceremony
   });
@@ -226,16 +204,16 @@ async function manualSetup() {
   // Compile circuit (both parameters required)
   const { r1csPath, wasmPath } = await setup.compileCircuit(
     'random',
-    'circuits/random_15.circom'
+    'circuits/random_1.circom'
   );
 
   // Generate powers of tau (all parameters required)
-  await setup.ensurePtauFile(15, 'pot15_final.ptau', 'my-entropy');
+  await setup.ensurePtauFile(15, 'pot11_final.ptau', 'my-entropy');
 
   // Run Groth16 setup (all parameters required)
   await setup.setupGroth16(
     r1csPath,
-    'pot15_final.ptau',
+    'pot11_final.ptau',
     'build/random_final.zkey',
     'my-setup-entropy'
   );
@@ -264,9 +242,9 @@ new RandomCircuitOrchestrator(options)
 
 | Option         | Type   | Default                   | Description                                 |
 | -------------- | ------ | ------------------------- | ------------------------------------------- |
-| `circuitName`  | string | `"random_15"`             | Circuit name: `random_1` to `random_15`     |
-| `numOutputs`   | number | `15`                      | Number of outputs (**must match circuit!**) |
-| `power`        | number | `15`                      | Powers of tau (2^power constraints)         |
+| `circuitName`  | string | `"random_1"`              | Circuit name: `random_1` to `random_1`      |
+| `numOutputs`   | number | `1`                      | Number of outputs (**must match circuit!**) |
+| `power`        | number | `11`                      | Powers of tau (2^power constraints)         |
 | `ptauName`     | string | `"pot{power}_final.ptau"` | PTAU filename                               |
 | `ptauEntropy`  | string | timestamp-based           | Entropy for ptau contribution               |
 | `setupEntropy` | string | timestamp-based           | Entropy for zkey contribution               |
@@ -303,7 +281,6 @@ Generates a complete ZK proof with verification.
 const result = await orchestrator.generateRandomProof({
   blockHash: 12345n,
   userNonce: 7,
-  kurierEntropy: 42,
   N: 1000,
 });
 // Returns: { proof, publicSignals, R (array of strings), circuitInputs }
@@ -348,7 +325,7 @@ Useful for testing and verification. **Both parameters are required.**
 ```javascript
 const { computeLocalHash } = require('randomgen');
 const { hashes, R } = await computeLocalHash(
-  { blockHash: 100, userNonce: 200, kurierEntropy: 300, N: 1000 },
+  { blockHash: 100, userNonce: 200, N: 1000 },
   15
 );
 // hashes: array of Poseidon hash output strings
@@ -359,13 +336,13 @@ const { hashes, R } = await computeLocalHash(
 
 Core cryptographic and utility functions. **All parameters are required** - no defaults.
 
-#### `computePoseidonHash(input1, input2, input3, nOuts)`
+#### `computePoseidonHash(input1, input2, nOuts)`
 
-Computes Poseidon hash of three inputs, returning an array of BigInt outputs.
+Computes Poseidon hash of two inputs, returning an array of BigInt outputs.
 For `nOuts > 4`, dummy zero inputs are automatically added to match circuit behavior.
 
 ```javascript
-const hashes = await utils.computePoseidonHash(1, 2, 3, 5);
+const hashes = await utils.computePoseidonHash(1, 2, 5);
 // Returns: BigInt[] - array of 5 hash values
 ```
 
@@ -386,16 +363,16 @@ const randoms = utils.generateRandomFromSeed([seed1, seed2, seed3], 1000n);
 #### `createCircuitInputs(inputs)`
 
 Creates properly formatted inputs for the circuit.
-All fields are required: `blockHash`, `userNonce`, `kurierEntropy`, `N`.
+All fields are required: `blockHash`, `userNonce`, `N`.
+Input values are truncated to 31 bytes (248 bits) if they exceed that size.
 
 ```javascript
 const circuitInputs = utils.createCircuitInputs({
   blockHash: 100,
   userNonce: 200,
-  kurierEntropy: 300,
   N: 1000,
 });
-// Returns: { blockHash, userNonce, kurierEntropy, N } as strings
+// Returns: { blockHash, userNonce, N } as strings
 ```
 
 #### `generateProof(inputs, circuitName)`
@@ -403,7 +380,7 @@ const circuitInputs = utils.createCircuitInputs({
 Generates a Groth16 proof. Both parameters are required.
 
 ```javascript
-const { proof, publicSignals } = await utils.generateProof(inputs, "random_15");
+const { proof, publicSignals } = await utils.generateProof(inputs, "random_1");
 ```
 
 #### `verifyProof(vkey, proof, publicSignals)`
@@ -438,7 +415,7 @@ Executes complete workflow: create inputs → generate proof → verify.
 Both parameters are required.
 
 ```javascript
-const result = await utils.fullWorkflow(inputs, "random_15");
+const result = await utils.fullWorkflow(inputs, "random_1");
 // Returns: { inputs, proof, publicSignals, isValid }
 ```
 
@@ -452,9 +429,9 @@ Orchestrates complete setup workflow with smart caching (only regenerates missin
 
 ```javascript
 await setup.completeSetup('random', {
-  circuitPath: 'circuits/random_15.circom',  // Required
-  power: 15,                               // Required
-  ptauName: 'pot15_final.ptau',           // Required
+  circuitPath: 'circuits/random_1.circom',  // Required
+  power: 11,                               // Required
+  ptauName: 'pot11_final.ptau',           // Required
   ptauEntropy: 'my-ptau-entropy',         // Required
   setupEntropy: 'my-setup-entropy',       // Required
 });
@@ -467,7 +444,7 @@ Compiles Circom circuit to R1CS and WASM. Both parameters are required.
 ```javascript
 const { r1csPath, wasmPath } = await setup.compileCircuit(
   'random',
-  'circuits/random_15.circom'
+  'circuits/random_1.circom'
 );
 ```
 
@@ -476,7 +453,7 @@ const { r1csPath, wasmPath } = await setup.compileCircuit(
 Creates or verifies Powers of Tau file. All parameters are required.
 
 ```javascript
-await setup.ensurePtauFile(15, 'pot15_final.ptau', 'my-entropy');
+await setup.ensurePtauFile(11, 'pot11_final.ptau', 'my-entropy');
 ```
 
 #### `setupGroth16(r1csPath, ptauPath, zkeyPath, entropy)`
@@ -486,7 +463,7 @@ Generates Groth16 proving key (zkey) with contribution. All parameters are requi
 ```javascript
 await setup.setupGroth16(
   'build/random.r1cs',
-  'pot15_final.ptau',
+  'pot11_final.ptau',
   'build/random_final.zkey',
   'my-entropy'
 );
@@ -512,8 +489,7 @@ randomgen/
 ├── README.md                # This file
 ├── jest.config.cjs          # Jest configuration for tests
 ├── circuits/
-│   ├── random_15.circom        # Production circuit (15 outputs)
-│   ├── random_3.circom   # Test circuit (3 outputs, faster)
+│   ├── random_X.circom      # Circuit for proving X random numbers
 │   ├── random_template.circom # Shared circuit template
 │   └── circomlib/           # Circom library dependencies
 ├── lib/
@@ -521,7 +497,7 @@ randomgen/
 │   ├── orchestrator.js      # High-level orchestrator
 │   └── setupArtifacts.js    # Setup and compilation utilities
 ├── tests/
-│   ├── random.test.cjs      # Circuit tests (uses random_3.circom)
+│   ├── random.test.cjs      # Circuit tests
 │   ├── utils.test.cjs       # Utils function tests
 │   ├── orchestrator.test.cjs # Orchestrator tests
 │   └── setupArtifacts.test.cjs # Setup utility tests
@@ -560,330 +536,6 @@ Test coverage includes:
 - Circuit validation tests (using `random_3.circom` with 3 outputs)
 - Integration tests for complete workflows
 - Edge cases and error handling
-
-**Note**: Tests use `random_3.circom` (3 outputs, power=13) for faster execution.
-
-## Example Use Cases
-
-### 1. Verifiable Lottery / Random Selection
-
-Generate provably fair random numbers for selecting winners from a pool of participants.
-The proof guarantees the randomness is deterministic and cannot be manipulated.
-
-```javascript
-const { RandomCircuitOrchestrator, computeLocalHash } = require('randomgen');
-
-async function selectLotteryWinners() {
-  // =========================================================================
-  // SETUP: Initialize the orchestrator (first run compiles circuit ~30-60s)
-  // =========================================================================
-  const orchestrator = new RandomCircuitOrchestrator({
-    // Use secure, unpredictable entropy in production!
-    // These could come from a hardware RNG, user input, or trusted source
-    ptauEntropy: process.env.PTAU_ENTROPY || 'lottery-ptau-entropy-2024',
-    setupEntropy: process.env.SETUP_ENTROPY || 'lottery-setup-entropy-2024',
-  });
-
-  await orchestrator.initialize();
-
-  // =========================================================================
-  // INPUTS: Combine public randomness sources for transparency
-  // =========================================================================
-  const participants = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', /* ... */];
-  const numWinners = 3;
-
-  // Public inputs that anyone can verify:
-  // - blockHash: from a future block (commit-reveal scheme)
-  // - userNonce: incremented for each draw to ensure uniqueness
-  const inputs = {
-    blockHash: 0x1a2b3c4d5e6f7890n,  // e.g., Ethereum block hash
-    userNonce: 1,                     // Draw #1 for this lottery
-    kurierEntropy: 0,                 // Private entropy (0 = none, fully transparent)
-    N: participants.length,           // Modulus = number of participants
-  };
-
-  // =========================================================================
-  // GENERATE PROOF: Create verifiable random numbers
-  // =========================================================================
-  const result = await orchestrator.generateRandomProof(inputs);
-
-  // result.R contains 15 random indices, each in range [0, participants.length)
-  // Take the first `numWinners` unique indices
-  const winnerIndices = [...new Set(result.R.map(r => Number(r)))].slice(0, numWinners);
-  const winners = winnerIndices.map(i => participants[i]);
-
-  console.log('=== LOTTERY RESULTS ===');
-  console.log('Block Hash:', inputs.blockHash.toString(16));
-  console.log('Draw Number:', inputs.userNonce);
-  console.log('Total Participants:', participants.length);
-  console.log('Winners:', winners);
-
-  // =========================================================================
-  // VERIFY: Anyone can verify the proof is valid
-  // =========================================================================
-  const isValid = await orchestrator.verifyRandomProof(result.proof, result.publicSignals);
-  console.log('Proof Valid:', isValid);
-
-  // Save proof for public audit
-  await orchestrator.saveProofData(result, './lottery-proofs');
-
-  return { winners, proof: result.proof, publicSignals: result.publicSignals };
-}
-
-selectLotteryWinners().catch(console.error);
-```
-
-### 2. Gaming: Provably Fair Card Shuffle
-
-Generate a verifiable shuffle for card games where players need to trust the randomness.
-
-```javascript
-const { RandomCircuitOrchestrator } = require('randomgen');
-
-async function shuffleDeck() {
-  // =========================================================================
-  // For gaming, you might want both server and player entropy
-  // =========================================================================
-  const serverSeed = BigInt('0x' + require('crypto').randomBytes(16).toString('hex'));
-  const playerCommitment = 12345n;  // Player submits this before seeing server seed
-
-  const orchestrator = new RandomCircuitOrchestrator({
-    ptauEntropy: 'game-server-ptau',
-    setupEntropy: 'game-server-setup',
-  });
-
-  await orchestrator.initialize();
-
-  // =========================================================================
-  // Generate 15 random values for shuffling
-  // =========================================================================
-  const result = await orchestrator.generateRandomProof({
-    blockHash: serverSeed,           // Server's randomness (revealed after player commits)
-    userNonce: playerCommitment,     // Player's commitment
-    kurierEntropy: Date.now(),       // Additional entropy
-    N: 52,                           // 52 cards in a deck
-  });
-
-  // =========================================================================
-  // Fisher-Yates shuffle using the random values
-  // =========================================================================
-  const deck = Array.from({ length: 52 }, (_, i) => i);  // [0, 1, 2, ..., 51]
-  const randomValues = result.R.map(r => Number(r));
-
-  for (let i = deck.length - 1; i > 0 && i >= deck.length - 15; i--) {
-    // Use each random value to pick a card to swap
-    const j = randomValues[deck.length - 1 - i] % (i + 1);
-    [deck[i], deck[j]] = [deck[j], deck[i]];
-  }
-
-  // =========================================================================
-  // The shuffled deck can be verified by anyone with the proof
-  // =========================================================================
-  console.log('Shuffled deck (first 10 cards):', deck.slice(0, 10));
-  console.log('Proof can be verified by all players');
-
-  // Players can independently verify the shuffle:
-  const isValid = await orchestrator.verifyRandomProof(result.proof, result.publicSignals);
-  console.log('Shuffle verified:', isValid);
-
-  return { deck, proof: result.proof, publicSignals: result.publicSignals };
-}
-
-shuffleDeck().catch(console.error);
-```
-
-### 3. Offline Verification (No Proof Generation)
-
-Verify expected outputs locally without the overhead of proof generation.
-Useful for testing, debugging, or pre-computing expected results.
-
-```javascript
-const { computeLocalHash, RandomCircuitOrchestrator } = require('randomgen');
-
-async function offlineVerification() {
-  // =========================================================================
-  // Compute what the circuit WOULD output (fast, no proof)
-  // =========================================================================
-  const inputs = {
-    blockHash: 12345678901234567890n,
-    userNonce: 7,
-    kurierEntropy: 42,
-    N: 1000,
-  };
-
-  // computeLocalHash mimics the circuit computation locally
-  // This is useful for:
-  //   1. Testing your integration before generating proofs
-  //   2. Pre-computing expected values
-  //   3. Debugging mismatches between local and circuit outputs
-  const { hashes, R } = await computeLocalHash(inputs, 15);
-
-  console.log('=== LOCAL COMPUTATION (no proof) ===');
-  console.log('Poseidon hashes:', hashes.slice(0, 3), '...');  // First 3 of 15
-  console.log('Random values R:', R.slice(0, 3), '...');       // First 3 of 15
-  console.log('All R values are in range [0, 1000)');
-
-  // =========================================================================
-  // Later, generate a real proof and verify outputs match
-  // =========================================================================
-  const orchestrator = new RandomCircuitOrchestrator({
-    ptauEntropy: 'verify-example-ptau',
-    setupEntropy: 'verify-example-setup',
-  });
-  await orchestrator.initialize();
-
-  const proofResult = await orchestrator.generateRandomProof(inputs);
-
-  // Verify the proof's R values match our local computation
-  const localMatchesProof = R.every((localR, i) => localR === proofResult.R[i]);
-  console.log('\n=== VERIFICATION ===');
-  console.log('Local computation matches proof:', localMatchesProof);
-  console.log('Proof is cryptographically valid:', 
-    await orchestrator.verifyRandomProof(proofResult.proof, proofResult.publicSignals)
-  );
-}
-
-offlineVerification().catch(console.error);
-```
-
-### 4. Low-Level API: Custom Circuit Integration
-
-For advanced users who need fine-grained control over the proof workflow.
-
-```javascript
-const { utils, setup } = require('randomgen');
-const path = require('path');
-
-async function customCircuitWorkflow() {
-  // =========================================================================
-  // STEP 1: Manual setup (useful for custom circuits or CI/CD pipelines)
-  // =========================================================================
-  const circuitName = 'random_3.circom';  // Use test circuit for this example
-  const circuitPath = path.join(__dirname, 'circuits', `${circuitName}.circom`);
-
-  console.log('Compiling circuit...');
-  const { r1csPath, wasmPath } = await setup.compileCircuit(circuitName, circuitPath);
-  console.log('  R1CS:', r1csPath);
-  console.log('  WASM:', wasmPath);
-
-  console.log('Setting up powers of tau...');
-  const ptauPath = await setup.ensurePtauFile(13, 'pot13_final.ptau', 'my-ptau-entropy');
-  console.log('  PTAU:', ptauPath);
-
-  console.log('Running Groth16 setup...');
-  const zkeyPath = await setup.setupGroth16(r1csPath, ptauPath, 'build/custom_final.zkey', 'my-zkey-entropy');
-  console.log('  Zkey:', zkeyPath);
-
-  console.log('Exporting verification key...');
-  const vkey = await setup.exportVerificationKey(zkeyPath, 'build/custom_vkey.json');
-  console.log('  Vkey exported');
-
-  // =========================================================================
-  // STEP 2: Create and validate inputs
-  // =========================================================================
-  const rawInputs = {
-    blockHash: 999888777n,
-    userNonce: 42,
-    kurierEntropy: 123456,
-    N: 100,
-  };
-
-  // createCircuitInputs ensures all values are properly formatted as strings
-  const circuitInputs = utils.createCircuitInputs(rawInputs);
-  console.log('\nCircuit inputs:', circuitInputs);
-
-  // =========================================================================
-  // STEP 3: Generate and verify proof using low-level utils
-  // =========================================================================
-  console.log('\nGenerating proof...');
-  const { proof, publicSignals } = await utils.generateProof(circuitInputs, circuitName);
-
-  console.log('Verifying proof...');
-  const isValid = await utils.verifyProof(vkey, proof, publicSignals);
-  console.log('Proof valid:', isValid);
-
-  // =========================================================================
-  // STEP 4: Extract random outputs from public signals
-  // =========================================================================
-  // Public signals format: [R[0], R[1], R[2], blockHash, userNonce, N]
-  // For random_3.circom circuit with 3 outputs:
-  const numOutputs = 3;
-  const R = publicSignals.slice(0, numOutputs);
-  console.log('\nRandom outputs R:', R);
-  console.log('All values are in range [0, 100):', R.every(r => BigInt(r) < 100n));
-}
-
-customCircuitWorkflow().catch(console.error);
-```
-
-### 5. Batch Processing: Multiple Proofs
-
-Generate multiple independent proofs efficiently by reusing the initialized orchestrator.
-
-```javascript
-const { RandomCircuitOrchestrator } = require('randomgen');
-
-async function batchProofGeneration() {
-  // =========================================================================
-  // Initialize once, generate many proofs
-  // =========================================================================
-  const orchestrator = new RandomCircuitOrchestrator({
-    circuitName: 'random_3.circom',  // Faster for demo
-    numOutputs: 3,
-    power: 13,
-    ptauEntropy: 'batch-ptau',
-    setupEntropy: 'batch-setup',
-  });
-
-  // First initialization is slow (compiles circuit, generates keys)
-  console.log('Initializing (one-time setup)...');
-  const startInit = Date.now();
-  await orchestrator.initialize();
-  console.log(`Initialization took ${Date.now() - startInit}ms`);
-
-  // =========================================================================
-  // Generate multiple proofs (much faster after initialization)
-  // =========================================================================
-  const requests = [
-    { blockHash: 100n, userNonce: 1, N: 50 },
-    { blockHash: 200n, userNonce: 2, N: 100 },
-    { blockHash: 300n, userNonce: 3, N: 200 },
-    { blockHash: 400n, userNonce: 4, N: 500 },
-    { blockHash: 500n, userNonce: 5, N: 1000 },
-  ];
-
-  console.log(`\nGenerating ${requests.length} proofs...`);
-  const results = [];
-
-  for (const [index, request] of requests.entries()) {
-    const startProof = Date.now();
-    
-    const result = await orchestrator.generateRandomProof({
-      ...request,
-      kurierEntropy: 0,  // No private entropy for this example
-    });
-    
-    const elapsed = Date.now() - startProof;
-    results.push({ ...result, elapsed });
-    
-    console.log(`  Proof ${index + 1}: R=${result.R.join(',')} (${elapsed}ms)`);
-  }
-
-  // =========================================================================
-  // Verify all proofs
-  // =========================================================================
-  console.log('\nVerifying all proofs...');
-  for (const [index, result] of results.entries()) {
-    const isValid = await orchestrator.verifyRandomProof(result.proof, result.publicSignals);
-    console.log(`  Proof ${index + 1}: ${isValid ? '✓ Valid' : '✗ Invalid'}`);
-  }
-
-  const avgTime = results.reduce((sum, r) => sum + r.elapsed, 0) / results.length;
-  console.log(`\nAverage proof time: ${avgTime.toFixed(0)}ms`);
-}
-
-batchProofGeneration().catch(console.error);
-```
 
 ## Troubleshooting
 
@@ -930,7 +582,6 @@ Ensure:
 - **Subsequent runs**: Near-instant (artifacts are cached)
 - **Proof generation**: ~1-2 seconds per proof
 - **Proof verification**: ~100-200ms per proof
-- **Test circuit**: Use `random_3.circom` for faster development
 
 ## Related Resources
 
